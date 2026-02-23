@@ -1,0 +1,103 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LeadMap Property",
+  "description": "Schema v4 — Riley County KS outreach CRM property record",
+  "schemaVersion": 4,
+  "type": "object",
+  "required": ["id", "address", "lat", "lng"],
+  "properties": {
+    "id": {
+      "type": ["string","integer"],
+      "description": "Unique identifier. String UUID preferred; legacy integer IDs accepted."
+    },
+    "address": { "type": "string", "description": "Property street address (Manhattan, KS)" },
+    "city":    { "type": "string", "default": "Manhattan, KS" },
+    "owner":   { "type": "string", "description": "Owner name as on county record" },
+    "mailing": { "type": "string", "description": "Owner mailing address (may be out-of-state)" },
+    "value":   { "type": "number", "minimum": 0, "description": "County appraised value USD" },
+    "lat":     { "type": "number", "minimum": -90,  "maximum": 90 },
+    "lng":     { "type": "number", "minimum": -180, "maximum": 180 },
+    "status": {
+      "type": "string",
+      "enum": ["hot","warm","new","contacted","under_contract","closed","dead"],
+      "default": "new"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "User-defined tags"
+    },
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Computed motivated-seller score (0–100)"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Quick freeform notes (autosaved)"
+    },
+    "structuredNotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id","ts","type","body"],
+        "properties": {
+          "id":   { "type": "string" },
+          "ts":   { "type": "integer", "description": "Unix ms timestamp" },
+          "type": { "type": "string", "enum": ["general","research","legal","personal"] },
+          "body": { "type": "string" }
+        }
+      }
+    },
+    "outreach": {
+      "type": "array",
+      "description": "Outreach activity log",
+      "items": {
+        "type": "object",
+        "required": ["id","ts","channel","outcome"],
+        "properties": {
+          "id":       { "type": "string" },
+          "ts":       { "type": "integer" },
+          "channel":  { "type": "string", "enum": ["call","email","letter","text","visit","other"] },
+          "outcome":  { "type": "string", "enum": ["no_answer","left_vm","spoke","interested","not_interested","callback","other"] },
+          "summary":  { "type": "string" },
+          "template": { "type": "string" }
+        }
+      }
+    },
+    "reminders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id","dueTs","label"],
+        "properties": {
+          "id":        { "type": "string" },
+          "dueTs":     { "type": "integer", "description": "Unix ms timestamp for due date" },
+          "label":     { "type": "string" },
+          "note":      { "type": "string" },
+          "done":      { "type": "boolean", "default": false },
+          "snoozedTo": { "type": ["integer","null"], "default": null },
+          "channel":   { "type": "string" }
+        }
+      }
+    },
+    "contacted":    { "type": "boolean", "default": false },
+    "offerMade":    { "type": "boolean", "default": false },
+    "offerAmount":  { "type": "string",  "default": "" },
+    "activeRental": { "type": "boolean", "default": false },
+    "createdTs":    { "type": "integer" },
+    "updatedTs":    { "type": "integer" }
+  },
+  "migrations": {
+    "description": "On open, schemaVersion stored in IDB meta store is compared. If < 4, migration runs.",
+    "v3_to_v4": [
+      "Add 'tags' array (default [])",
+      "Add 'structuredNotes' array (default [])",
+      "Add 'outreach' array, migrate legacy 'activity' entries",
+      "Add 'reminders' array (default [])",
+      "Add 'createdTs' / 'updatedTs' (default Date.now())",
+      "Normalize 'id' to string"
+    ]
+  }
+}
