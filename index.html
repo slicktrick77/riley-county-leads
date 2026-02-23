@@ -4,21 +4,12 @@
   ║  LeadMap v4  ·  Riley County KS Property Outreach CRM           ║
   ║  Phase 1 — Daily Master App                                      ║
   ╠══════════════════════════════════════════════════════════════════╣
-  ║  RUNNING.md                                                      ║
-  ║  1. Open index.html in Chrome / Edge / Firefox (local file ok)  ║
-  ║  2. First run loads 10 sample properties automatically           ║
-  ║  3. ⬆ Import → leads.json (from generate_leads.py)              ║
-  ║  4. Data persists in IndexedDB; localStorage used as fallback    ║
-  ║                                                                  ║
-  ║  IndexedDB: db=leadmap4  store=props  metaStore=meta  ver=4      ║
-  ║  Schema version 4 — see schema.json for field docs              ║
-  ║  Migrations: v3 activity[] → v4 outreach[]; adds tags,          ║
-  ║    structuredNotes, reminders, createdTs, updatedTs              ║
-  ║                                                                  ║
-  ║  Investment defaults (edit JS constants below):                  ║
-  ║    OFFER_PCT  = 0.78  (offer = 78% of appraised)                ║
-  ║    LOAN_LTV   = 0.80  (DSCR loan LTV)                           ║
-  ║    RENT_RATIO = 0.006 (monthly rent ≈ 0.6% of value)            ║
+  ║  CHANGELOG                                                       ║
+  ║  2026-02-22  Phase 1 initial build                               ║
+  ║  2026-02-22  Bug fixes: B001, B004, B008                        ║
+  ║    B004: Offer input now saves on blur/enter, not on keystroke   ║
+  ║    B001: Select-all checkbox resets properly on clearSelection   ║
+  ║    B008: Map marker icons refresh immediately on status change   ║
   ╚══════════════════════════════════════════════════════════════════╝
 -->
 <html lang="en">
@@ -34,83 +25,34 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
 <style>
-/* ═══════════════════════════════════════════════════════════
-   DESIGN SYSTEM — Industrial/Utilitarian with amber accents
-   Inspired by field operations dashboards
-═══════════════════════════════════════════════════════════ */
 :root{
-  --bg0:#0a0c0f;
-  --bg1:#0f1215;
-  --bg2:#14181e;
-  --bg3:#1a2030;
-  --border:#1e2530;
-  --border2:#28334a;
-  --text:#d4dae8;
-  --text2:#8594b0;
-  --text3:#4a5870;
-  --amber:#f5a623;
-  --amber2:rgba(245,166,35,.13);
-  --amber3:rgba(245,166,35,.06);
-  --red:#e05252;
-  --red2:rgba(224,82,82,.13);
-  --orange:#e8813a;
-  --orange2:rgba(232,129,58,.13);
-  --green:#3db87a;
-  --green2:rgba(61,184,122,.13);
-  --blue:#4a9eff;
-  --blue2:rgba(74,158,255,.13);
-  --purple:#8b5cf6;
-  --purple2:rgba(139,92,246,.13);
-  --teal:#06b6d4;
-  --teal2:rgba(6,182,212,.13);
-  --mono:'JetBrains Mono',monospace;
-  --sans:'Space Grotesk',sans-serif;
-  --r:6px;
-  --r2:10px;
-  --shadow:0 4px 24px rgba(0,0,0,.5);
+  --bg0:#0a0c0f;--bg1:#0f1215;--bg2:#14181e;--bg3:#1a2030;
+  --border:#1e2530;--border2:#28334a;--text:#d4dae8;--text2:#8594b0;--text3:#4a5870;
+  --amber:#f5a623;--amber2:rgba(245,166,35,.13);--amber3:rgba(245,166,35,.06);
+  --red:#e05252;--red2:rgba(224,82,82,.13);--orange:#e8813a;--orange2:rgba(232,129,58,.13);
+  --green:#3db87a;--green2:rgba(61,184,122,.13);--blue:#4a9eff;--blue2:rgba(74,158,255,.13);
+  --purple:#8b5cf6;--purple2:rgba(139,92,246,.13);--teal:#06b6d4;--teal2:rgba(6,182,212,.13);
+  --mono:'JetBrains Mono',monospace;--sans:'Space Grotesk',sans-serif;
+  --r:6px;--r2:10px;--shadow:0 4px 24px rgba(0,0,0,.5);
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--sans);overflow:hidden;font-size:13px;}
-
-/* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
-
-/* ── TOPBAR ── */
-#topbar{
-  height:46px;background:var(--bg1);border-bottom:1px solid var(--border);
-  display:flex;align-items:center;padding:0 14px;gap:12px;
-  flex-shrink:0;position:relative;z-index:600;
-}
+#topbar{height:46px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:12px;flex-shrink:0;position:relative;z-index:600;}
 .tb-brand{display:flex;align-items:center;gap:8px;margin-right:6px;flex-shrink:0;}
-.tb-logo{
-  width:30px;height:30px;
-  background:linear-gradient(135deg,var(--amber),var(--orange));
-  border-radius:7px;display:flex;align-items:center;justify-content:center;
-  font-size:15px;flex-shrink:0;box-shadow:0 2px 8px rgba(245,166,35,.3);
-}
+.tb-logo{width:30px;height:30px;background:linear-gradient(135deg,var(--amber),var(--orange));border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;box-shadow:0 2px 8px rgba(245,166,35,.3);}
 .tb-name{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--amber);}
 .tb-ver{font-size:9px;color:var(--text3);font-family:var(--mono);}
 .tb-div{width:1px;height:22px;background:var(--border2);flex-shrink:0;}
-/* Search */
 .tb-search-wrap{position:relative;flex-shrink:0;}
 .tb-search-wrap svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text3);}
-#tb-search{
-  width:240px;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);
-  padding:6px 10px 6px 32px;color:var(--text);font-size:12px;font-family:var(--sans);
-  transition:border-color .15s;
-}
+#tb-search{width:240px;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);padding:6px 10px 6px 32px;color:var(--text);font-size:12px;font-family:var(--sans);transition:border-color .15s;}
 #tb-search:focus{outline:none;border-color:var(--amber);}
 #tb-search::placeholder{color:var(--text3);}
-/* Filter pills */
 .filt-group{display:flex;gap:3px;flex-wrap:nowrap;}
-.filt{
-  padding:4px 10px;border-radius:var(--r);font-size:10px;font-weight:600;
-  cursor:pointer;border:1px solid var(--border2);background:transparent;
-  color:var(--text3);font-family:var(--sans);letter-spacing:.04em;
-  transition:all .15s;white-space:nowrap;
-}
+.filt{padding:4px 10px;border-radius:var(--r);font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:var(--sans);letter-spacing:.04em;transition:all .15s;white-space:nowrap;}
 .filt:hover{color:var(--text);border-color:var(--border2);}
 .filt.act-all{background:var(--amber3);border-color:var(--amber);color:var(--amber);}
 .filt.act-hot{background:var(--red2);border-color:var(--red);color:var(--red);}
@@ -121,73 +63,36 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .filt.act-closed{background:var(--green2);border-color:var(--green);color:var(--green);}
 .filt.act-dead{background:var(--bg2);border-color:var(--text3);color:var(--text3);}
 .filt.act-today{background:var(--teal2);border-color:var(--teal);color:var(--teal);}
-/* Sort */
 .tb-sort-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0;}
 .tb-sort-wrap label{font-size:10px;color:var(--text3);}
-#sort-sel{
-  background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);
-  color:var(--text2);font-size:10px;padding:4px 7px;cursor:pointer;font-family:var(--sans);
-}
+#sort-sel{background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);font-size:10px;padding:4px 7px;cursor:pointer;font-family:var(--sans);}
 #sort-sel:focus{outline:none;}
-.tb-spacer{flex:1;}
-/* Stats */
 .tb-stat{text-align:center;flex-shrink:0;}
 .tb-stat-v{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text);}
 .tb-stat-l{font-size:9px;color:var(--text3);letter-spacing:.07em;text-transform:uppercase;margin-top:1px;}
-/* Buttons */
-.tb-btn{
-  background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);
-  color:var(--text2);font-size:11px;padding:5px 11px;cursor:pointer;
-  font-family:var(--sans);flex-shrink:0;transition:all .15s;white-space:nowrap;
-}
+.tb-btn{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);font-size:11px;padding:5px 11px;cursor:pointer;font-family:var(--sans);flex-shrink:0;transition:all .15s;white-space:nowrap;}
 .tb-btn:hover{color:var(--text);border-color:var(--border2);}
 .tb-btn.prim{background:var(--amber);border-color:var(--amber);color:#000;font-weight:700;}
 .tb-btn.prim:hover{background:#f5b940;}
 .tb-btn.danger:hover{color:var(--red);border-color:var(--red);}
 #save-dot{width:6px;height:6px;border-radius:50%;background:var(--green);opacity:0;transition:opacity .3s;flex-shrink:0;}
 #save-dot.on{opacity:1;}
-#today-badge{
-  display:none;background:var(--red);color:#fff;border-radius:10px;
-  font-size:9px;font-weight:700;padding:1px 5px;font-family:var(--mono);
-  position:relative;top:-1px;margin-left:3px;
-}
+#today-badge{display:none;background:var(--red);color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;font-family:var(--mono);position:relative;top:-1px;margin-left:3px;}
 #today-badge.on{display:inline;}
-
-/* ── SHELL ── */
 #shell{display:flex;height:calc(100vh - 46px);overflow:hidden;}
-
-/* ── LEFT PANEL ── */
-#left-panel{
-  width:310px;flex-shrink:0;background:var(--bg1);
-  border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;
-}
+#left-panel{width:310px;flex-shrink:0;background:var(--bg1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
 #list-header{padding:10px 12px 8px;border-bottom:1px solid var(--border);flex-shrink:0;}
 #list-meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
 #list-count{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--text2);}
-/* Bulk bar */
-#bulk-bar{
-  display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);
-  padding:7px 10px;margin-top:6px;flex-shrink:0;
-  align-items:center;gap:6px;flex-wrap:wrap;
-}
+#bulk-bar{display:none;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:7px 10px;margin-top:6px;flex-shrink:0;align-items:center;gap:6px;flex-wrap:wrap;}
 #bulk-bar.on{display:flex;}
 #bulk-count{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--amber);flex-shrink:0;}
-.bulk-btn{
-  padding:3px 9px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;
-  border:1px solid var(--border2);background:transparent;color:var(--text2);
-  font-family:var(--sans);transition:all .15s;
-}
+.bulk-btn{padding:3px 9px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--sans);transition:all .15s;}
 .bulk-btn:hover{color:var(--text);border-color:var(--text3);}
 .bulk-btn.da{color:var(--red2);border-color:rgba(224,82,82,.3);}
 .bulk-btn.da:hover{color:var(--red);}
-#bulk-select-all{accent-color:var(--amber);}
 #list-scroll{flex:1;overflow-y:auto;}
-
-/* Lead row */
-.lead-row{
-  padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;
-  transition:background .1s;position:relative;user-select:none;
-}
+.lead-row{padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;position:relative;user-select:none;}
 .lead-row:hover{background:rgba(255,255,255,.02);}
 .lead-row.sel{background:rgba(245,166,35,.05);border-left:2px solid var(--amber);padding-left:10px;}
 .lead-row.checked{background:rgba(74,158,255,.04);}
@@ -204,99 +109,40 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .lr-score{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;flex-shrink:0;}
 .lr-tag-chip{font-size:8px;font-weight:700;padding:1px 5px;border-radius:2px;letter-spacing:.04em;text-transform:uppercase;background:var(--bg3);color:var(--text2);}
 .lr-reminder-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:auto;}
-
-/* ── CENTER MAP ── */
 #map-wrap{flex:1;position:relative;overflow:hidden;}
 #map{width:100%;height:100%;}
-
-/* Map pin */
 .pin-wrap{background:none;border:none;}
-.pin-pill{
-  border-radius:10px 10px 10px 2px;padding:3px 7px;
-  font-size:10px;font-weight:700;font-family:var(--mono);
-  white-space:nowrap;cursor:pointer;
-  box-shadow:0 2px 10px rgba(0,0,0,.55);
-  transition:transform .12s;border:1.5px solid rgba(255,255,255,.15);
-}
+.pin-pill{border-radius:10px 10px 10px 2px;padding:3px 7px;font-size:10px;font-weight:700;font-family:var(--mono);white-space:nowrap;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.55);transition:transform .12s;border:1.5px solid rgba(255,255,255,.15);}
 .pin-pill:hover{transform:scale(1.07);}
 .pin-pill.sel{transform:scale(1.15);box-shadow:0 0 0 3px rgba(255,255,255,.2),0 4px 16px rgba(0,0,0,.6);border-radius:8px;}
-
-/* Today overlay */
-#today-overlay{
-  display:none;position:absolute;top:0;left:0;right:0;bottom:0;
-  background:var(--bg0);z-index:500;overflow-y:auto;padding:20px;
-}
+#today-overlay{display:none;position:absolute;top:0;left:0;right:0;bottom:0;background:var(--bg0);z-index:500;overflow-y:auto;padding:20px;}
 #today-overlay.on{display:block;}
-
-/* ── RIGHT PANEL ── */
-#right-panel{
-  width:390px;flex-shrink:0;background:var(--bg1);
-  border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;
-}
-/* Empty state */
-#dash-empty{
-  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  gap:10px;color:var(--text3);padding:20px;text-align:center;
-}
+#right-panel{width:390px;flex-shrink:0;background:var(--bg1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+#dash-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text3);padding:20px;text-align:center;}
 #dash-empty .big{font-size:36px;}
-
-/* Property panel */
 #prop-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-
-/* Panel header */
-#pp-head{
-  padding:14px;border-bottom:1px solid var(--border);flex-shrink:0;
-}
+#pp-head{padding:14px;border-bottom:1px solid var(--border);flex-shrink:0;}
 .pph-row1{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
 #pp-badge{font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;letter-spacing:.05em;}
-.pp-btn-sm{
-  background:none;border:1px solid var(--border2);border-radius:4px;color:var(--text3);
-  font-size:10px;padding:3px 9px;cursor:pointer;font-family:var(--sans);transition:all .15s;
-}
+.pp-btn-sm{background:none;border:1px solid var(--border2);border-radius:4px;color:var(--text3);font-size:10px;padding:3px 9px;cursor:pointer;font-family:var(--sans);transition:all .15s;}
 .pp-btn-sm:hover{color:var(--text);}
 #pp-addr{font-size:15px;font-weight:700;line-height:1.3;margin-bottom:3px;}
 #pp-meta{font-size:10px;color:var(--text3);font-family:var(--mono);}
-/* Tags strip */
 #pp-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px;align-items:center;}
-.pp-tag{
-  font-size:10px;font-weight:600;padding:2px 8px;border-radius:3px;
-  background:var(--bg3);border:1px solid var(--border2);color:var(--text2);
-  display:flex;align-items:center;gap:4px;
-}
+.pp-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:3px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);display:flex;align-items:center;gap:4px;}
 .pp-tag-x{cursor:pointer;color:var(--text3);font-size:11px;line-height:1;}
 .pp-tag-x:hover{color:var(--red);}
-#pp-add-tag{
-  font-size:10px;color:var(--text3);background:none;border:1px dashed var(--border2);
-  border-radius:3px;padding:2px 8px;cursor:pointer;font-family:var(--sans);transition:all .15s;
-}
+#pp-add-tag{font-size:10px;color:var(--text3);background:none;border:1px dashed var(--border2);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:var(--sans);transition:all .15s;}
 #pp-add-tag:hover{color:var(--amber);border-color:var(--amber);}
-
-/* Tabs */
 #pp-tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0;}
-.pp-tab{
-  flex:1;padding:9px 4px;text-align:center;font-size:11px;font-weight:600;
-  cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;
-  transition:all .15s;letter-spacing:.03em;
-}
+.pp-tab{flex:1;padding:9px 4px;text-align:center;font-size:11px;font-weight:600;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;transition:all .15s;letter-spacing:.03em;}
 .pp-tab:hover{color:var(--text2);}
 .pp-tab.active{color:var(--amber);border-bottom-color:var(--amber);}
-
-/* Tab content */
 #pp-body{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;}
-
-/* Section label */
-.sec-lbl{
-  font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--text3);margin-bottom:8px;display:flex;align-items:center;gap:6px;
-}
+.sec-lbl{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
 .sec-lbl::after{content:'';flex:1;height:1px;background:var(--border);}
-
-/* KPI grid */
 .kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
-.kpi{
-  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);
-  padding:9px 11px;position:relative;overflow:hidden;
-}
+.kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:9px 11px;position:relative;overflow:hidden;}
 .kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
 .kpi.green::before{background:var(--green);}
 .kpi.amber::before{background:var(--amber);}
@@ -313,11 +159,7 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .kpi-v.purple{color:var(--purple);}
 .kpi-v.orange{color:var(--orange);}
 .kpi-sub{font-size:9px;color:var(--text3);font-family:var(--mono);margin-top:3px;}
-
-/* Score block */
-.score-block{
-  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px;
-}
+.score-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px;}
 .sb-top{display:flex;align-items:center;gap:12px;margin-bottom:10px;}
 .sb-num{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;}
 .sb-right{flex:1;}
@@ -332,81 +174,35 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .sig.on .sig-dot{background:var(--green);}
 .sig.off .sig-dot{background:var(--text3);}
 .sig-pts{margin-left:auto;font-family:var(--mono);font-size:9px;opacity:.6;}
-
-/* Owner block */
-.owner-block{
-  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px;
-}
+.owner-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px;}
 .ob-name{font-size:13px;font-weight:700;margin-bottom:2px;}
 .ob-mail{font-size:10px;color:var(--text2);font-family:var(--mono);margin-bottom:8px;word-break:break-word;}
 .ob-tags{display:flex;gap:5px;flex-wrap:wrap;}
 .ob-tag{font-size:10px;font-weight:600;padding:3px 9px;border-radius:4px;border:1px solid;}
-
-/* Status grid */
 .status-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
-.s-btn{
-  padding:6px 4px;border-radius:5px;font-size:10px;font-weight:600;
-  cursor:pointer;border:1px solid;font-family:var(--sans);transition:all .15s;
-  text-align:center;letter-spacing:.03em;
-}
-
-/* Offer block */
+.s-btn{padding:6px 4px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid;font-family:var(--sans);transition:all .15s;text-align:center;letter-spacing:.03em;}
 .offer-block{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px;}
-.offer-inp{
-  width:100%;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);
-  padding:8px 10px;color:var(--text);font-size:14px;font-family:var(--mono);
-  margin-bottom:7px;transition:border-color .15s;
-}
+.offer-inp{width:100%;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);padding:8px 10px;color:var(--text);font-size:14px;font-family:var(--mono);margin-bottom:7px;transition:border-color .15s;}
 .offer-inp:focus{outline:none;border-color:var(--amber);}
 .offer-inp::placeholder{color:var(--text3);}
-.offer-calc{
-  background:var(--bg0);border:1px solid var(--border);border-radius:var(--r);
-  padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--text2);margin-bottom:7px;
-}
+.offer-calc{background:var(--bg0);border:1px solid var(--border);border-radius:var(--r);padding:8px 10px;font-family:var(--mono);font-size:10px;color:var(--text2);margin-bottom:7px;}
 .offer-calc span{color:var(--amber);font-weight:700;}
 .check-row{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11px;color:var(--text2);cursor:pointer;}
 .check-row input{accent-color:var(--amber);}
-
-/* Notes tab */
-.quick-notes-area{
-  width:100%;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);
-  padding:10px;color:var(--text);font-size:12px;resize:vertical;
-  font-family:var(--sans);min-height:80px;line-height:1.6;
-  transition:border-color .15s;
-}
+.quick-notes-area{width:100%;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);padding:10px;color:var(--text);font-size:12px;resize:vertical;font-family:var(--sans);min-height:80px;line-height:1.6;transition:border-color .15s;}
 .quick-notes-area:focus{outline:none;border-color:var(--amber);}
 .note-autosave{font-size:10px;color:var(--text3);margin-top:4px;font-family:var(--mono);}
-/* Structured notes */
-.snote{
-  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
-  padding:10px 12px;
-}
+.snote{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;}
 .snote-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
-.snote-type{
-  font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;
-  text-transform:uppercase;letter-spacing:.06em;background:var(--bg3);color:var(--text2);
-}
+.snote-type{font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;text-transform:uppercase;letter-spacing:.06em;background:var(--bg3);color:var(--text2);}
 .snote-ts{font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:auto;}
-.snote-del{
-  background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;
-  line-height:1;padding:0 2px;
-}
+.snote-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:14px;line-height:1;padding:0 2px;}
 .snote-del:hover{color:var(--red);}
 .snote-body{font-size:11px;color:var(--text2);line-height:1.6;white-space:pre-wrap;}
-.add-note-btn{
-  width:100%;background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--r);
-  padding:8px;color:var(--text3);font-size:11px;font-family:var(--sans);cursor:pointer;transition:all .15s;
-}
+.add-note-btn{width:100%;background:var(--bg2);border:1px dashed var(--border2);border-radius:var(--r);padding:8px;color:var(--text3);font-size:11px;font-family:var(--sans);cursor:pointer;transition:all .15s;}
 .add-note-btn:hover{color:var(--amber);border-color:var(--amber);}
-
-/* Outreach tab */
-.outreach-btn{
-  width:100%;background:var(--blue2);border:1px solid rgba(74,158,255,.25);border-radius:var(--r);
-  padding:9px;color:var(--blue);font-size:11px;font-weight:600;
-  font-family:var(--sans);cursor:pointer;letter-spacing:.03em;transition:all .15s;
-}
+.outreach-btn{width:100%;background:var(--blue2);border:1px solid rgba(74,158,255,.25);border-radius:var(--r);padding:9px;color:var(--blue);font-size:11px;font-weight:600;font-family:var(--sans);cursor:pointer;letter-spacing:.03em;transition:all .15s;}
 .outreach-btn:hover{background:rgba(74,158,255,.2);}
-/* Timeline */
 .tl{display:flex;flex-direction:column;gap:0;}
 .tl-item{display:flex;gap:10px;position:relative;padding-bottom:12px;}
 .tl-item:last-child{padding-bottom:0;}
@@ -420,18 +216,9 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .tl-ts{font-size:9px;color:var(--text3);font-family:var(--mono);margin-left:auto;}
 .tl-summary{font-size:11px;color:var(--text2);line-height:1.5;}
 .tl-empty{font-size:11px;color:var(--text3);font-style:italic;}
-
-/* Reminders tab */
-.rem-create-btn{
-  width:100%;background:var(--teal2);border:1px solid rgba(6,182,212,.25);border-radius:var(--r);
-  padding:9px;color:var(--teal);font-size:11px;font-weight:600;
-  font-family:var(--sans);cursor:pointer;letter-spacing:.03em;transition:all .15s;
-}
+.rem-create-btn{width:100%;background:var(--teal2);border:1px solid rgba(6,182,212,.25);border-radius:var(--r);padding:9px;color:var(--teal);font-size:11px;font-weight:600;font-family:var(--sans);cursor:pointer;letter-spacing:.03em;transition:all .15s;}
 .rem-create-btn:hover{background:rgba(6,182,212,.2);}
-.rem-item{
-  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
-  padding:10px 12px;display:flex;gap:10px;align-items:flex-start;
-}
+.rem-item{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;display:flex;gap:10px;align-items:flex-start;}
 .rem-item.overdue{border-color:rgba(224,82,82,.4);background:var(--red2);}
 .rem-item.today{border-color:rgba(245,166,35,.35);background:var(--amber3);}
 .rem-item.done{opacity:.45;}
@@ -440,71 +227,34 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .rem-due{font-size:10px;font-family:var(--mono);}
 .rem-note{font-size:10px;color:var(--text2);margin-top:3px;}
 .rem-actions{display:flex;gap:4px;flex-shrink:0;}
-.rem-btn{
-  padding:3px 8px;border-radius:4px;font-size:9px;font-weight:600;cursor:pointer;
-  border:1px solid var(--border2);background:transparent;color:var(--text2);
-  font-family:var(--sans);transition:all .15s;
-}
+.rem-btn{padding:3px 8px;border-radius:4px;font-size:9px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--sans);transition:all .15s;}
 .rem-btn:hover{color:var(--text);border-color:var(--text3);}
 .rem-btn.done-btn{color:var(--green);border-color:rgba(61,184,122,.3);}
 .rem-btn.done-btn:hover{background:var(--green2);}
-
-/* Script btn */
-.script-btn{
-  width:100%;background:var(--blue2);border:1px solid rgba(74,158,255,.2);border-radius:var(--r);
-  padding:7px;color:var(--blue);font-size:11px;font-weight:600;
-  font-family:var(--sans);cursor:pointer;letter-spacing:.03em;margin-top:10px;transition:all .15s;
-}
+.script-btn{width:100%;background:var(--blue2);border:1px solid rgba(74,158,255,.2);border-radius:var(--r);padding:7px;color:var(--blue);font-size:11px;font-weight:600;font-family:var(--sans);cursor:pointer;letter-spacing:.03em;margin-top:10px;transition:all .15s;}
 .script-btn:hover{background:rgba(74,158,255,.2);}
-
-/* Panel footer */
-#pp-footer{
-  padding:10px 14px;border-top:1px solid var(--border);
-  display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0;
-}
+#pp-footer{padding:10px 14px;border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex-shrink:0;}
 .pf-kpi{text-align:center;}
 .pf-v{font-family:var(--mono);font-size:11px;font-weight:700;}
 .pf-l{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-top:1px;}
-
-/* ── MODALS ── */
-.modal-bg{
-  display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);
-  z-index:9000;align-items:center;justify-content:center;padding:20px;
-}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;align-items:center;justify-content:center;padding:20px;}
 .modal-bg.on{display:flex;}
-.modal-box{
-  background:var(--bg1);border:1px solid var(--border2);border-radius:var(--r2);
-  padding:22px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;
-  box-shadow:var(--shadow);
-}
+.modal-box{background:var(--bg1);border:1px solid var(--border2);border-radius:var(--r2);padding:22px;max-width:480px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow);}
 .modal-box h3{font-size:13px;font-weight:700;margin-bottom:14px;color:var(--text);}
 .modal-row{margin-bottom:12px;}
 .modal-row label{display:block;font-size:10px;font-weight:600;color:var(--text3);margin-bottom:5px;letter-spacing:.06em;text-transform:uppercase;}
-.m-inp,.m-sel,.m-ta{
-  width:100%;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);
-  padding:8px 10px;color:var(--text);font-size:12px;font-family:var(--sans);
-  transition:border-color .15s;
-}
+.m-inp,.m-sel,.m-ta{width:100%;background:var(--bg0);border:1px solid var(--border2);border-radius:var(--r);padding:8px 10px;color:var(--text);font-size:12px;font-family:var(--sans);transition:border-color .15s;}
 .m-inp:focus,.m-sel:focus,.m-ta:focus{outline:none;border-color:var(--amber);}
 .m-ta{resize:vertical;min-height:70px;line-height:1.5;}
 .m-sel option{background:var(--bg0);}
 .modal-btns{display:flex;gap:8px;margin-top:16px;justify-content:flex-end;}
-.m-btn{
-  padding:7px 16px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;
-  border:1px solid var(--border2);background:transparent;color:var(--text2);
-  font-family:var(--sans);transition:all .15s;
-}
+.m-btn{padding:7px 16px;border-radius:var(--r);font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--sans);transition:all .15s;}
 .m-btn:hover{color:var(--text);}
 .m-btn.prim{background:var(--amber);border-color:var(--amber);color:#000;}
 .m-btn.prim:hover{background:#f5b940;}
 .chip-row{display:flex;gap:5px;flex-wrap:wrap;}
-.chip{
-  padding:5px 11px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;
-  border:1px solid var(--border2);color:var(--text3);transition:all .15s;font-family:var(--sans);
-}
+.chip{padding:5px 11px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--border2);color:var(--text3);transition:all .15s;font-family:var(--sans);}
 .chip:hover,.chip.sel{border-color:var(--amber);color:var(--amber);background:var(--amber3);}
-
-/* Outreach outcome chips */
 .out-chip.call{border-color:rgba(74,158,255,.3);color:var(--blue);}
 .out-chip.call.sel{background:var(--blue2);}
 .out-chip.email{border-color:rgba(245,166,35,.3);color:var(--amber);}
@@ -517,26 +267,15 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .out-chip.visit.sel{background:var(--teal2);}
 .out-chip.other{border-color:var(--border2);color:var(--text3);}
 .out-chip.other.sel{background:var(--bg3);}
-
-/* ── TODAY VIEW ── */
-.today-header{
-  display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;
-  border-bottom:1px solid var(--border);
-}
+.today-header{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border);}
 .today-header h2{font-size:18px;font-weight:700;}
 .today-header .date{font-family:var(--mono);font-size:11px;color:var(--text3);}
 .today-close{margin-left:auto;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text3);font-size:11px;padding:5px 12px;cursor:pointer;font-family:var(--sans);}
 .today-close:hover{color:var(--text);}
 .today-section{margin-bottom:20px;}
-.today-sec-lbl{
-  font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  margin-bottom:10px;display:flex;align-items:center;gap:8px;
-}
+.today-sec-lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px;}
 .today-sec-lbl::after{content:'';flex:1;height:1px;background:var(--border);}
-.today-rem-card{
-  background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
-  padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;
-}
+.today-rem-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;}
 .today-rem-card.overdue{border-color:rgba(224,82,82,.4);}
 .today-rem-card.today-due{border-color:rgba(245,166,35,.35);}
 .trc-left{flex:1;}
@@ -544,95 +283,40 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
 .trc-lbl{font-size:11px;color:var(--text2);margin-bottom:3px;}
 .trc-due{font-size:10px;font-family:var(--mono);}
 .trc-actions{display:flex;gap:5px;flex-shrink:0;}
-.trc-btn{
-  padding:5px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;
-  border:1px solid var(--border2);background:transparent;color:var(--text2);
-  font-family:var(--sans);transition:all .15s;
-}
+.trc-btn{padding:5px 10px;border-radius:4px;font-size:10px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--sans);transition:all .15s;}
 .trc-btn:hover{color:var(--text);}
 .trc-btn.go{color:var(--amber);border-color:rgba(245,166,35,.3);}
 .trc-btn.go:hover{background:var(--amber3);}
 .trc-btn.done{color:var(--green);border-color:rgba(61,184,122,.3);}
 .trc-btn.done:hover{background:var(--green2);}
 .today-empty{font-size:12px;color:var(--text3);font-style:italic;padding:10px 0;}
-
-/* ── TOAST / UNDO ── */
-#toast-wrap{
-  position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
-  display:flex;flex-direction:column;gap:6px;align-items:center;z-index:99999;pointer-events:none;
-}
-.toast{
-  background:var(--bg3);border:1px solid var(--border2);color:var(--text);
-  font-size:11px;font-family:var(--mono);padding:8px 16px;border-radius:20px;
-  opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:10px;
-  pointer-events:none;box-shadow:var(--shadow);
-}
+#toast-wrap{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;z-index:99999;pointer-events:none;}
+.toast{background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-size:11px;font-family:var(--mono);padding:8px 16px;border-radius:20px;opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:10px;pointer-events:none;box-shadow:var(--shadow);}
 .toast.on{opacity:1;pointer-events:auto;}
-.toast-undo{
-  background:none;border:none;color:var(--amber);font-size:10px;font-weight:700;
-  cursor:pointer;font-family:var(--mono);padding:0;
-}
-
-/* Bulk snooze sub-modal */
+.toast-undo{background:none;border:none;color:var(--amber);font-size:10px;font-weight:700;cursor:pointer;font-family:var(--mono);padding:0;}
 #snooze-modal .modal-box{max-width:340px;}
 .snooze-opts{display:grid;grid-template-columns:1fr 1fr;gap:7px;}
-.snooze-opt{
-  padding:8px 12px;border-radius:var(--r);font-size:11px;font-weight:600;cursor:pointer;
-  border:1px solid var(--border2);background:transparent;color:var(--text2);
-  font-family:var(--sans);text-align:center;transition:all .15s;
-}
+.snooze-opt{padding:8px 12px;border-radius:var(--r);font-size:11px;font-weight:600;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--text2);font-family:var(--sans);text-align:center;transition:all .15s;}
 .snooze-opt:hover{border-color:var(--teal);color:var(--teal);background:var(--teal2);}
-
-/* Script modal */
-#script-body-txt{
-  font-size:12px;color:var(--text2);line-height:1.8;white-space:pre-wrap;
-  background:var(--bg0);border-radius:var(--r);padding:14px;border:1px solid var(--border);
-  margin-bottom:14px;font-family:var(--sans);
-}
-
-/* Import progress */
-#import-progress{
-  font-family:var(--mono);font-size:11px;color:var(--text2);margin-top:8px;min-height:20px;
-}
-
-/* leaflet cluster override */
-.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{
-  background:rgba(245,166,35,.25)!important;
-}
-.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{
-  background:rgba(245,166,35,.6)!important;color:#000!important;font-family:var(--mono)!important;font-weight:700!important;
-}
-
-/* File input hidden */
+#script-body-txt{font-size:12px;color:var(--text2);line-height:1.8;white-space:pre-wrap;background:var(--bg0);border-radius:var(--r);padding:14px;border:1px solid var(--border);margin-bottom:14px;font-family:var(--sans);}
+#import-progress{font-family:var(--mono);font-size:11px;color:var(--text2);margin-top:8px;min-height:20px;}
+.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(245,166,35,.25)!important;}
+.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:rgba(245,166,35,.6)!important;color:#000!important;font-family:var(--mono)!important;font-weight:700!important;}
 #file-input{display:none;}
-
-/* Responsive hints */
-@media(max-width:1100px){
-  #left-panel{width:270px;}
-  #right-panel{width:350px;}
-}
+@media(max-width:1100px){#left-panel{width:270px;}#right-panel{width:350px;}}
 </style>
 </head>
 <body>
-
-<!-- TOPBAR -->
 <div id="topbar">
   <div class="tb-brand">
     <div class="tb-logo">📍</div>
-    <div>
-      <div class="tb-name">LEADMAP</div>
-      <div class="tb-ver">v4 · Riley County KS</div>
-    </div>
+    <div><div class="tb-name">LEADMAP</div><div class="tb-ver">v4 · Riley County KS</div></div>
   </div>
   <div class="tb-div"></div>
-
-  <!-- Search -->
   <div class="tb-search-wrap">
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
     <input type="text" id="tb-search" placeholder="Search address, owner, tags…" oninput="onSearch()" autocomplete="off">
   </div>
-
-  <!-- Filters -->
   <div class="filt-group" id="filt-group">
     <button class="filt act-all" onclick="setFilter('all',this)">All</button>
     <button class="filt" onclick="setFilter('hot',this)">Hot</button>
@@ -643,8 +327,6 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
     <button class="filt" onclick="setFilter('closed',this)">Closed</button>
     <button class="filt" onclick="setFilter('today',this)">📅 Today<span id="today-badge"></span></button>
   </div>
-
-  <!-- Sort -->
   <div class="tb-sort-wrap">
     <label for="sort-sel">Sort</label>
     <select id="sort-sel" onchange="onSortChange()">
@@ -655,24 +337,11 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
       <option value="status">Status</option>
     </select>
   </div>
-
   <div class="tb-div"></div>
-
-  <div class="tb-stat">
-    <div class="tb-stat-v" id="st-leads">0</div>
-    <div class="tb-stat-l">Leads</div>
-  </div>
-  <div class="tb-stat">
-    <div class="tb-stat-v" id="st-hot">0</div>
-    <div class="tb-stat-l">Hot</div>
-  </div>
-  <div class="tb-stat">
-    <div class="tb-stat-v" id="st-offers">0</div>
-    <div class="tb-stat-l">Offers</div>
-  </div>
-
+  <div class="tb-stat"><div class="tb-stat-v" id="st-leads">0</div><div class="tb-stat-l">Leads</div></div>
+  <div class="tb-stat"><div class="tb-stat-v" id="st-hot">0</div><div class="tb-stat-l">Hot</div></div>
+  <div class="tb-stat"><div class="tb-stat-v" id="st-offers">0</div><div class="tb-stat-l">Offers</div></div>
   <div class="tb-div"></div>
-
   <button class="tb-btn" onclick="toggleToday()">📅 Today</button>
   <button class="tb-btn prim" onclick="triggerImport()">⬆ Import</button>
   <button class="tb-btn" onclick="exportJSON()">⬇ JSON</button>
@@ -683,10 +352,7 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   <input type="file" id="file-input" accept=".json,.csv" onchange="handleImport(event)">
 </div>
 
-<!-- SHELL -->
 <div id="shell">
-
-  <!-- LEFT PANEL -->
   <div id="left-panel">
     <div id="list-header">
       <div id="list-meta">
@@ -696,7 +362,6 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
           <label for="bulk-select-all" style="font-size:10px;color:var(--text3);cursor:pointer">All</label>
         </div>
       </div>
-      <!-- Bulk actions bar -->
       <div id="bulk-bar">
         <span id="bulk-count">0 selected</span>
         <button class="bulk-btn" onclick="bulkStatus()">Set Status</button>
@@ -710,29 +375,22 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
     <div id="list-scroll"></div>
   </div>
 
-  <!-- MAP -->
   <div id="map-wrap">
     <div id="map"></div>
-    <!-- Today overlay (shown over map) -->
     <div id="today-overlay">
       <div class="today-header">
-        <div>
-          <h2>📅 Today's Queue</h2>
-          <div class="date" id="today-date"></div>
-        </div>
+        <div><h2>📅 Today's Queue</h2><div class="date" id="today-date"></div></div>
         <button class="today-close" onclick="toggleToday()">✕ Close</button>
       </div>
       <div id="today-content"></div>
     </div>
   </div>
 
-  <!-- RIGHT PANEL -->
   <div id="right-panel">
     <div id="dash-empty">
       <div class="big">📍</div>
       <p style="font-size:12px;line-height:1.7">Select a property from the list<br>or click a marker on the map.<br><br>
-        <span style="color:var(--text3);font-size:11px">Use ⬆ Import to load your leads.json<br>or explore the sample dataset.</span>
-      </p>
+        <span style="color:var(--text3);font-size:11px">Use ⬆ Import to load your leads.json<br>or explore the sample dataset.</span></p>
     </div>
     <div id="prop-panel" style="display:none;">
       <div id="pp-head">
@@ -761,17 +419,13 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
       </div>
     </div>
   </div>
-
-</div><!-- /shell -->
+</div>
 
 <!-- MODALS -->
-
-<!-- Outreach modal -->
 <div class="modal-bg" id="outreach-modal">
   <div class="modal-box">
     <h3>📋 Log Outreach</h3>
-    <div class="modal-row">
-      <label>Channel</label>
+    <div class="modal-row"><label>Channel</label>
       <div class="chip-row" id="oc-channel">
         <div class="chip out-chip call sel" data-v="call" onclick="pickChip('oc-channel',this)">📞 Call</div>
         <div class="chip out-chip email" data-v="email" onclick="pickChip('oc-channel',this)">📧 Email</div>
@@ -779,10 +433,8 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
         <div class="chip out-chip text" data-v="text" onclick="pickChip('oc-channel',this)">💬 Text</div>
         <div class="chip out-chip visit" data-v="visit" onclick="pickChip('oc-channel',this)">🚗 Visit</div>
         <div class="chip out-chip other" data-v="other" onclick="pickChip('oc-channel',this)">Other</div>
-      </div>
-    </div>
-    <div class="modal-row">
-      <label>Outcome</label>
+      </div></div>
+    <div class="modal-row"><label>Outcome</label>
       <div class="chip-row" id="oc-outcome">
         <div class="chip sel" data-v="no_answer" onclick="pickChip('oc-outcome',this)">No Answer</div>
         <div class="chip" data-v="left_vm" onclick="pickChip('oc-outcome',this)">Left VM</div>
@@ -791,26 +443,17 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
         <div class="chip" data-v="not_interested" onclick="pickChip('oc-outcome',this)">Not Interested</div>
         <div class="chip" data-v="callback" onclick="pickChip('oc-outcome',this)">Callback</div>
         <div class="chip" data-v="other" onclick="pickChip('oc-outcome',this)">Other</div>
-      </div>
-    </div>
-    <div class="modal-row">
-      <label>Date / Time</label>
-      <input type="datetime-local" id="oc-date" class="m-inp">
-    </div>
-    <div class="modal-row">
-      <label>Summary (optional)</label>
-      <textarea id="oc-summary" class="m-ta" placeholder="Brief notes on the conversation…"></textarea>
-    </div>
-    <div class="modal-row">
-      <label>Auto-schedule follow-up?</label>
+      </div></div>
+    <div class="modal-row"><label>Date / Time</label><input type="datetime-local" id="oc-date" class="m-inp"></div>
+    <div class="modal-row"><label>Summary (optional)</label><textarea id="oc-summary" class="m-ta" placeholder="Brief notes…"></textarea></div>
+    <div class="modal-row"><label>Auto-schedule follow-up?</label>
       <div class="chip-row" id="oc-followup">
         <div class="chip sel" data-v="" onclick="pickChip('oc-followup',this)">None</div>
         <div class="chip" data-v="1" onclick="pickChip('oc-followup',this)">+1 Day</div>
         <div class="chip" data-v="3" onclick="pickChip('oc-followup',this)">+3 Days</div>
         <div class="chip" data-v="7" onclick="pickChip('oc-followup',this)">+1 Week</div>
         <div class="chip" data-v="30" onclick="pickChip('oc-followup',this)">+1 Month</div>
-      </div>
-    </div>
+      </div></div>
     <div class="modal-btns">
       <button class="m-btn" onclick="closeModal('outreach-modal')">Cancel</button>
       <button class="m-btn prim" onclick="saveOutreach()">Save Outreach</button>
@@ -818,33 +461,17 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Reminder modal -->
 <div class="modal-bg" id="reminder-modal">
   <div class="modal-box">
     <h3>🔔 Create Reminder</h3>
-    <div class="modal-row">
-      <label>Label</label>
-      <input type="text" id="rm-label" class="m-inp" placeholder="e.g. Follow up call, Send letter…">
-    </div>
-    <div class="modal-row">
-      <label>Due Date</label>
-      <input type="date" id="rm-due" class="m-inp">
-    </div>
-    <div class="modal-row">
-      <label>Note (optional)</label>
-      <textarea id="rm-note" class="m-ta" placeholder="Any context…" rows="3"></textarea>
-    </div>
-    <div class="modal-row">
-      <label>Channel</label>
+    <div class="modal-row"><label>Label</label><input type="text" id="rm-label" class="m-inp" placeholder="e.g. Follow up call, Send letter…"></div>
+    <div class="modal-row"><label>Due Date</label><input type="date" id="rm-due" class="m-inp"></div>
+    <div class="modal-row"><label>Note (optional)</label><textarea id="rm-note" class="m-ta" placeholder="Any context…" rows="3"></textarea></div>
+    <div class="modal-row"><label>Channel</label>
       <select id="rm-channel" class="m-sel">
-        <option value="">— any —</option>
-        <option value="call">Call</option>
-        <option value="email">Email</option>
-        <option value="letter">Letter</option>
-        <option value="text">Text</option>
-        <option value="visit">Visit</option>
-      </select>
-    </div>
+        <option value="">— any —</option><option value="call">Call</option><option value="email">Email</option>
+        <option value="letter">Letter</option><option value="text">Text</option><option value="visit">Visit</option>
+      </select></div>
     <div class="modal-btns">
       <button class="m-btn" onclick="closeModal('reminder-modal')">Cancel</button>
       <button class="m-btn prim" onclick="saveReminder()">Create Reminder</button>
@@ -852,7 +479,6 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Snooze modal -->
 <div class="modal-bg" id="snooze-modal">
   <div class="modal-box">
     <h3>😴 Snooze Reminder</h3>
@@ -868,23 +494,17 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Structured note modal -->
 <div class="modal-bg" id="snote-modal">
   <div class="modal-box">
     <h3>📝 Add Note</h3>
-    <div class="modal-row">
-      <label>Type</label>
+    <div class="modal-row"><label>Type</label>
       <div class="chip-row" id="sn-type">
         <div class="chip sel" data-v="general" onclick="pickChip('sn-type',this)">General</div>
         <div class="chip" data-v="research" onclick="pickChip('sn-type',this)">Research</div>
         <div class="chip" data-v="legal" onclick="pickChip('sn-type',this)">Legal</div>
         <div class="chip" data-v="personal" onclick="pickChip('sn-type',this)">Personal</div>
-      </div>
-    </div>
-    <div class="modal-row">
-      <label>Note</label>
-      <textarea id="sn-body" class="m-ta" rows="5" placeholder="Your note…"></textarea>
-    </div>
+      </div></div>
+    <div class="modal-row"><label>Note</label><textarea id="sn-body" class="m-ta" rows="5" placeholder="Your note…"></textarea></div>
     <div class="modal-btns">
       <button class="m-btn" onclick="closeModal('snote-modal')">Cancel</button>
       <button class="m-btn prim" onclick="saveStructuredNote()">Save Note</button>
@@ -892,14 +512,10 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Tag modal -->
 <div class="modal-bg" id="tag-modal">
   <div class="modal-box" style="max-width:340px">
     <h3>🏷 Add Tag</h3>
-    <div class="modal-row">
-      <label>Tag name</label>
-      <input type="text" id="tag-inp" class="m-inp" placeholder="e.g. military, motivated, remodeled" maxlength="40">
-    </div>
+    <div class="modal-row"><label>Tag name</label><input type="text" id="tag-inp" class="m-inp" placeholder="e.g. military, motivated, remodeled" maxlength="40"></div>
     <div class="modal-btns">
       <button class="m-btn" onclick="closeModal('tag-modal')">Cancel</button>
       <button class="m-btn prim" onclick="saveTag()">Add Tag</button>
@@ -907,22 +523,16 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Bulk status modal -->
 <div class="modal-bg" id="bulk-status-modal">
   <div class="modal-box" style="max-width:360px">
     <h3>Set Status — <span id="bsm-count"></span> properties</h3>
-    <div class="modal-row">
-      <label>New Status</label>
+    <div class="modal-row"><label>New Status</label>
       <select id="bsm-sel" class="m-sel">
-        <option value="hot">🔴 Hot</option>
-        <option value="warm">🟠 Warm</option>
-        <option value="new">⚫ New</option>
-        <option value="contacted">🔵 Contacted</option>
+        <option value="hot">🔴 Hot</option><option value="warm">🟠 Warm</option>
+        <option value="new">⚫ New</option><option value="contacted">🔵 Contacted</option>
         <option value="under_contract">🟣 Under Contract</option>
-        <option value="closed">🟢 Closed</option>
-        <option value="dead">💀 Dead</option>
-      </select>
-    </div>
+        <option value="closed">🟢 Closed</option><option value="dead">💀 Dead</option>
+      </select></div>
     <div class="modal-btns">
       <button class="m-btn" onclick="closeModal('bulk-status-modal')">Cancel</button>
       <button class="m-btn prim" onclick="applyBulkStatus()">Apply</button>
@@ -930,14 +540,10 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Bulk tag modal -->
 <div class="modal-bg" id="bulk-tag-modal">
   <div class="modal-box" style="max-width:340px">
     <h3>Add Tag — <span id="btm-count"></span> properties</h3>
-    <div class="modal-row">
-      <label>Tag</label>
-      <input type="text" id="btm-inp" class="m-inp" placeholder="tag name" maxlength="40">
-    </div>
+    <div class="modal-row"><label>Tag</label><input type="text" id="btm-inp" class="m-inp" placeholder="tag name" maxlength="40"></div>
     <div class="modal-btns">
       <button class="m-btn" onclick="closeModal('bulk-tag-modal')">Cancel</button>
       <button class="m-btn prim" onclick="applyBulkTag()">Apply</button>
@@ -945,18 +551,11 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Bulk reminder modal -->
 <div class="modal-bg" id="bulk-rem-modal">
   <div class="modal-box" style="max-width:380px">
     <h3>Schedule Reminder — <span id="brm-count"></span> properties</h3>
-    <div class="modal-row">
-      <label>Label</label>
-      <input type="text" id="brm-label" class="m-inp" placeholder="Follow up call…">
-    </div>
-    <div class="modal-row">
-      <label>Due Date</label>
-      <input type="date" id="brm-due" class="m-inp">
-    </div>
+    <div class="modal-row"><label>Label</label><input type="text" id="brm-label" class="m-inp" placeholder="Follow up call…"></div>
+    <div class="modal-row"><label>Due Date</label><input type="date" id="brm-due" class="m-inp"></div>
     <div class="modal-btns">
       <button class="m-btn" onclick="closeModal('bulk-rem-modal')">Cancel</button>
       <button class="m-btn prim" onclick="applyBulkReminder()">Schedule</button>
@@ -964,7 +563,6 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Script modal -->
 <div class="modal-bg" id="script-modal">
   <div class="modal-box">
     <h3 id="script-title">Call Script</h3>
@@ -977,1419 +575,577 @@ html,body{height:100%;background:var(--bg0);color:var(--text);font-family:var(--
   </div>
 </div>
 
-<!-- Import validation -->
 <div class="modal-bg" id="import-modal">
   <div class="modal-box" style="max-width:420px">
     <h3>⬆ Import Results</h3>
     <div id="import-progress"></div>
-    <div class="modal-btns">
-      <button class="m-btn prim" onclick="closeModal('import-modal')">Done</button>
-    </div>
+    <div class="modal-btns"><button class="m-btn prim" onclick="closeModal('import-modal')">Done</button></div>
   </div>
 </div>
 
-<!-- Toast container -->
 <div id="toast-wrap"></div>
 
 <script>
 'use strict';
-// ═══════════════════════════════════════════════════════════
-//  CONSTANTS
-// ═══════════════════════════════════════════════════════════
-const OFFER_PCT  = 0.78;
-const LOAN_LTV   = 0.80;
-const RENT_RATIO = 0.006;
-const DB_NAME    = 'leadmap4';
-const DB_VER     = 4;
-const STORE      = 'props';
-const META_STORE = 'meta';
-const LS_KEY     = 'leadmap_v4_fallback';
-const CLUSTER_THRESHOLD = 300;
-
-const STATUS_CFG = {
-  hot:            { label:'Hot',           color:'#e05252', bg:'rgba(224,82,82,.13)' },
-  warm:           { label:'Warm',          color:'#e8813a', bg:'rgba(232,129,58,.13)' },
-  new:            { label:'New',           color:'#8594b0', bg:'rgba(133,148,176,.1)' },
-  contacted:      { label:'Contacted',     color:'#4a9eff', bg:'rgba(74,158,255,.13)' },
-  under_contract: { label:'Under Contract',color:'#8b5cf6', bg:'rgba(139,92,246,.13)' },
-  closed:         { label:'Closed',        color:'#3db87a', bg:'rgba(61,184,122,.13)' },
-  dead:           { label:'Dead',          color:'#4a5870', bg:'rgba(74,88,112,.13)' },
+const OFFER_PCT=0.78,LOAN_LTV=0.80,RENT_RATIO=0.006;
+const DB_NAME='leadmap4',DB_VER=4,STORE='props',META_STORE='meta',LS_KEY='leadmap_v4_fallback';
+const CLUSTER_THRESHOLD=300;
+const STATUS_CFG={
+  hot:{label:'Hot',color:'#e05252',bg:'rgba(224,82,82,.13)'},
+  warm:{label:'Warm',color:'#e8813a',bg:'rgba(232,129,58,.13)'},
+  new:{label:'New',color:'#8594b0',bg:'rgba(133,148,176,.1)'},
+  contacted:{label:'Contacted',color:'#4a9eff',bg:'rgba(74,158,255,.13)'},
+  under_contract:{label:'Under Contract',color:'#8b5cf6',bg:'rgba(139,92,246,.13)'},
+  closed:{label:'Closed',color:'#3db87a',bg:'rgba(61,184,122,.13)'},
+  dead:{label:'Dead',color:'#4a5870',bg:'rgba(74,88,112,.13)'},
 };
 
-// ═══════════════════════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════════════════
-let db = null;
-let properties = [];
-let selectedId = null;
-let activeFilter = 'all';
-let sortMode = 'score';
-let selectedIds = new Set();
-let activeTab = 'overview';
-let outreachTargetId = null;
-let reminderTargetId = null;
-let snoozeTargetId = null;
-let snoozeReminderId = null;
-let noteTargetId = null;
-let tagTargetId = null;
-let undoStack = [];
-let autoSaveTimer = null;
-let todayOpen = false;
+let db=null,properties=[],selectedId=null,activeFilter='all',sortMode='score';
+let selectedIds=new Set(),activeTab='overview';
+let outreachTargetId=null,reminderTargetId=null,snoozeTargetId=null,snoozeReminderId=null;
+let noteTargetId=null,tagTargetId=null,undoStack=[],autoSaveTimer=null,todayOpen=false;
 
-// ═══════════════════════════════════════════════════════════
-//  XSS-SAFE ESCAPING
-// ═══════════════════════════════════════════════════════════
-function esc(s) {
-  if (s == null) return '';
-  return String(s)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#39;');
-}
-function escNL(s) { return esc(s).replace(/\n/g,'<br>'); }
+function esc(s){if(s==null)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function escNL(s){return esc(s).replace(/\n/g,'<br>');}
 
-// ═══════════════════════════════════════════════════════════
-//  INDEXEDDB
-// ═══════════════════════════════════════════════════════════
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VER);
-    req.onupgradeneeded = e => {
-      const d = e.target.result;
-      if (!d.objectStoreNames.contains(STORE)) {
-        d.createObjectStore(STORE, { keyPath: 'id' });
-      }
-      if (!d.objectStoreNames.contains(META_STORE)) {
-        d.createObjectStore(META_STORE, { keyPath: 'k' });
-      }
-    };
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror   = e => reject(e.target.error);
-  });
-}
+// ── IndexedDB ──
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open(DB_NAME,DB_VER);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE,{keyPath:'id'});if(!d.objectStoreNames.contains(META_STORE))d.createObjectStore(META_STORE,{keyPath:'k'});};r.onsuccess=e=>res(e.target.result);r.onerror=e=>rej(e.target.error);});}
+function idbGetAll(){return new Promise((res)=>{if(!db){res([]);return;}const tx=db.transaction(STORE,'readonly');const r=tx.objectStore(STORE).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>res([]);});}
+function idbPutAll(arr){return new Promise((res)=>{if(!db){res();return;}const tx=db.transaction(STORE,'readwrite');const st=tx.objectStore(STORE);arr.forEach(p=>st.put(p));tx.oncomplete=res;tx.onerror=()=>res();});}
+function idbClear(){return new Promise((res)=>{if(!db){res();return;}const tx=db.transaction(STORE,'readwrite');tx.objectStore(STORE).clear();tx.oncomplete=res;tx.onerror=res;});}
+async function persistAll(){await idbPutAll(properties);try{localStorage.setItem(LS_KEY,JSON.stringify(properties));}catch(_){}flashSave();}
+async function persistOne(p){if(db)await idbPutAll([p]);try{localStorage.setItem(LS_KEY,JSON.stringify(properties));}catch(_){}flashSave();}
+function flashSave(){const d=document.getElementById('save-dot');d.classList.add('on');clearTimeout(d._t);d._t=setTimeout(()=>d.classList.remove('on'),1500);}
 
-function idbGetAll() {
-  return new Promise((resolve, reject) => {
-    if (!db) { resolve([]); return; }
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror   = () => resolve([]);
-  });
-}
-
-function idbPutAll(arr) {
-  return new Promise((resolve, reject) => {
-    if (!db) { resolve(); return; }
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    arr.forEach(p => store.put(p));
-    tx.oncomplete = resolve;
-    tx.onerror = () => resolve();
-  });
-}
-
-function idbDelete(id) {
-  return new Promise((resolve) => {
-    if (!db) { resolve(); return; }
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = resolve;
-    tx.onerror = resolve;
-  });
-}
-
-function idbClear() {
-  return new Promise((resolve) => {
-    if (!db) { resolve(); return; }
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).clear();
-    tx.oncomplete = resolve;
-    tx.onerror = resolve;
-  });
-}
-
-async function persistAll() {
-  await idbPutAll(properties);
-  // localStorage fallback (may fail for large datasets — silently ignored)
-  try { localStorage.setItem(LS_KEY, JSON.stringify(properties)); } catch(_){}
-  flashSave();
-}
-
-async function persistOne(p) {
-  if (db) await idbPutAll([p]);
-  try { localStorage.setItem(LS_KEY, JSON.stringify(properties)); } catch(_){}
-  flashSave();
-}
-
-function flashSave() {
-  const d = document.getElementById('save-dot');
-  d.classList.add('on');
-  clearTimeout(d._t);
-  d._t = setTimeout(() => d.classList.remove('on'), 1500);
-}
-
-// ═══════════════════════════════════════════════════════════
-//  SAMPLE DATA
-// ═══════════════════════════════════════════════════════════
-const SAMPLE = [
-  { id:'s1', address:'1412 Fairchild Ave', city:'Manhattan, KS', owner:'HENDERSON, ROBERT L', mailing:'4218 Patriot Dr, Woodbridge, VA 22192', value:245000, lat:39.1901, lng:-96.5832, status:'hot' },
-  { id:'s2', address:'628 Moro St', city:'Manhattan, KS', owner:'CHEN, MICHAEL K', mailing:'PSC 473 Box 8920, APO AP 96310', value:198500, lat:39.1855, lng:-96.5798, status:'hot' },
-  { id:'s3', address:'1834 Westport Dr', city:'Manhattan, KS', owner:'PATEL, ANITA S', mailing:'2201 Glebe Rd, Arlington, VA 22207', value:289000, lat:39.1922, lng:-96.5904, status:'warm' },
-  { id:'s4', address:'507 N 10th St', city:'Manhattan, KS', owner:'WILLIAMS, JAMES T', mailing:'8842 Overland Park Blvd, Overland Park, KS 66212', value:0, lat:39.1875, lng:-96.5743, status:'new' },
-  { id:'s5', address:'2203 Claflin Rd', city:'Manhattan, KS', owner:'GARCIA, LISA M', mailing:'14330 Clay Terrace Blvd, Carmel, IN 46032', value:312000, lat:39.1947, lng:-96.5967, status:'warm' },
-  { id:'s6', address:'913 Sunset Ave', city:'Manhattan, KS', owner:'JOHNSON, DEREK P', mailing:'CMR 477 Box 4421, APO AE 09107', value:221000, lat:39.1833, lng:-96.5811, status:'hot' },
-  { id:'s7', address:'1129 Brownie Ave', city:'Manhattan, KS', owner:'SMITH, CAROL J', mailing:'722 S 3rd St, Springfield, IL 62701', value:195000, lat:39.1889, lng:-96.5856, status:'new' },
-  { id:'s8', address:'3015 Anderson Ave', city:'Manhattan, KS', owner:'TAYLOR, MARK B', mailing:'9050 N Meridian St, Indianapolis, IN 46260', value:267000, lat:39.1958, lng:-96.6021, status:'contacted' },
-  { id:'s9', address:'418 Humboldt St', city:'Manhattan, KS', owner:'BROWN, NATALIE R', mailing:'3311 Pentagon Rd, Alexandria, VA 22306', value:234000, lat:39.1867, lng:-96.5779, status:'warm' },
-  { id:'s10',address:'720 N Manhattan Ave', city:'Manhattan, KS', owner:'DAVIS, CHRISTOPHER L', mailing:'1820 Fort Union Blvd, Midvale, UT 84047', value:188000, lat:39.1841, lng:-96.5763, status:'new' },
+// ── Sample Data ──
+const SAMPLE=[
+  {id:'s1',address:'1412 Fairchild Ave',city:'Manhattan, KS',owner:'HENDERSON, ROBERT L',mailing:'4218 Patriot Dr, Woodbridge, VA 22192',value:245000,lat:39.1901,lng:-96.5832,status:'hot'},
+  {id:'s2',address:'628 Moro St',city:'Manhattan, KS',owner:'CHEN, MICHAEL K',mailing:'PSC 473 Box 8920, APO AP 96310',value:198500,lat:39.1855,lng:-96.5798,status:'hot'},
+  {id:'s3',address:'1834 Westport Dr',city:'Manhattan, KS',owner:'PATEL, ANITA S',mailing:'2201 Glebe Rd, Arlington, VA 22207',value:289000,lat:39.1922,lng:-96.5904,status:'warm'},
+  {id:'s4',address:'507 N 10th St',city:'Manhattan, KS',owner:'WILLIAMS, JAMES T',mailing:'8842 Overland Park Blvd, Overland Park, KS 66212',value:0,lat:39.1875,lng:-96.5743,status:'new'},
+  {id:'s5',address:'2203 Claflin Rd',city:'Manhattan, KS',owner:'GARCIA, LISA M',mailing:'14330 Clay Terrace Blvd, Carmel, IN 46032',value:312000,lat:39.1947,lng:-96.5967,status:'warm'},
+  {id:'s6',address:'913 Sunset Ave',city:'Manhattan, KS',owner:'JOHNSON, DEREK P',mailing:'CMR 477 Box 4421, APO AE 09107',value:221000,lat:39.1833,lng:-96.5811,status:'hot'},
+  {id:'s7',address:'1129 Brownie Ave',city:'Manhattan, KS',owner:'SMITH, CAROL J',mailing:'722 S 3rd St, Springfield, IL 62701',value:195000,lat:39.1889,lng:-96.5856,status:'new'},
+  {id:'s8',address:'3015 Anderson Ave',city:'Manhattan, KS',owner:'TAYLOR, MARK B',mailing:'9050 N Meridian St, Indianapolis, IN 46260',value:267000,lat:39.1958,lng:-96.6021,status:'contacted'},
+  {id:'s9',address:'418 Humboldt St',city:'Manhattan, KS',owner:'BROWN, NATALIE R',mailing:'3311 Pentagon Rd, Alexandria, VA 22306',value:234000,lat:39.1867,lng:-96.5779,status:'warm'},
+  {id:'s10',address:'720 N Manhattan Ave',city:'Manhattan, KS',owner:'DAVIS, CHRISTOPHER L',mailing:'1820 Fort Union Blvd, Midvale, UT 84047',value:188000,lat:39.1841,lng:-96.5763,status:'new'},
 ];
 
-function makeFreshProp(raw) {
-  const now = Date.now();
-  return {
-    id:             String(raw.id ?? uid()),
-    address:        String(raw.address || ''),
-    city:           String(raw.city || 'Manhattan, KS'),
-    owner:          String(raw.owner || ''),
-    mailing:        String(raw.mailing || raw.mailingAddress || ''),
-    value:          parseFloat(String(raw.value || 0).replace(/[$,]/g,'')) || 0,
-    lat:            parseFloat(raw.lat) || 39.1836,
-    lng:            parseFloat(raw.lng) || -96.5751,
-    status:         STATUS_CFG[raw.status] ? raw.status : 'new',
-    tags:           Array.isArray(raw.tags) ? raw.tags.map(t=>String(t)) : [],
-    notes:          String(raw.notes || ''),
-    structuredNotes: Array.isArray(raw.structuredNotes) ? raw.structuredNotes : [],
-    outreach:       Array.isArray(raw.outreach) ? raw.outreach :
-                    (Array.isArray(raw.activity) ? migrateActivity(raw.activity) : []),
-    reminders:      Array.isArray(raw.reminders) ? raw.reminders : [],
-    contacted:      !!(raw.contacted === true || raw.contacted === 'true' || raw.contacted === '1'),
-    offerMade:      !!(raw.offerMade === true || raw.offerMade === 'true' || raw.offerMade === '1'),
-    offerAmount:    String(raw.offerAmount || ''),
-    activeRental:   !!(raw.activeRental === true || raw.activeRental === 'true'),
-    createdTs:      raw.createdTs || now,
-    updatedTs:      raw.updatedTs || now,
+function makeFreshProp(raw){
+  const now=Date.now();
+  return{
+    id:String(raw.id??uid()),address:String(raw.address||''),city:String(raw.city||'Manhattan, KS'),
+    owner:String(raw.owner||''),mailing:String(raw.mailing||raw.mailingAddress||''),
+    value:parseFloat(String(raw.value||0).replace(/[$,]/g,''))||0,
+    lat:parseFloat(raw.lat)||39.1836,lng:parseFloat(raw.lng)||-96.5751,
+    status:STATUS_CFG[raw.status]?raw.status:'new',
+    tags:Array.isArray(raw.tags)?raw.tags.map(t=>String(t)):[],
+    notes:String(raw.notes||''),
+    structuredNotes:Array.isArray(raw.structuredNotes)?raw.structuredNotes:[],
+    outreach:Array.isArray(raw.outreach)?raw.outreach:(Array.isArray(raw.activity)?migrateActivity(raw.activity):[]),
+    reminders:Array.isArray(raw.reminders)?raw.reminders:[],
+    contacted:!!(raw.contacted===true||raw.contacted==='true'||raw.contacted==='1'),
+    offerMade:!!(raw.offerMade===true||raw.offerMade==='true'||raw.offerMade==='1'),
+    offerAmount:String(raw.offerAmount||''),
+    activeRental:!!(raw.activeRental===true||raw.activeRental==='true'),
+    createdTs:raw.createdTs||now,updatedTs:raw.updatedTs||now,
   };
 }
+function migrateActivity(arr){return arr.map(a=>({id:uid(),ts:a.ts||Date.now(),channel:a.type&&a.type.toLowerCase().includes('call')?'call':a.type&&a.type.toLowerCase().includes('email')?'email':a.type&&a.type.toLowerCase().includes('letter')?'letter':'other',outcome:'other',summary:String(a.note||''),template:''}));}
 
-function migrateActivity(arr) {
-  // v3 activity → v4 outreach
-  return arr.map(a => ({
-    id:      uid(),
-    ts:      a.ts || Date.now(),
-    channel: a.type && a.type.toLowerCase().includes('call') ? 'call' :
-             a.type && a.type.toLowerCase().includes('email') ? 'email' :
-             a.type && a.type.toLowerCase().includes('letter') ? 'letter' : 'other',
-    outcome: 'other',
-    summary: String(a.note || ''),
-    template: '',
-  }));
-}
+// ── Helpers ──
+function uid(){return Math.random().toString(36).slice(2)+Date.now().toString(36);}
+const fmt=n=>'$'+Math.round(n||0).toLocaleString();
+const fmtK=n=>{const v=Math.abs(n||0);return v>=1000000?'$'+(v/1e6).toFixed(1)+'m':v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+Math.round(v);};
+const isMil=a=>/\bAPO\b|\bFPO\b|PSC\s+\d|CMR\s+\d/.test(a||'');
+const isVA=a=>/,\s*VA[\s,\d]/.test(a||'');
+const isOOS=a=>!(a||'').includes(', KS')&&!(a||'').toLowerCase().includes('manhattan, ks');
+const dayStart=ts=>{const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();};
+const todayStart=()=>dayStart(Date.now());
+const todayEnd=()=>todayStart()+86400000-1;
+function firstName(owner){const p=owner.split(',');return p.length>1?p[1].trim().split(/\s+/)[0]:owner.split(/\s+/)[0];}
+function tsLabel(ts){if(!ts)return '';const d=new Date(ts),now=new Date();const diff=Math.floor((now-d)/60000);if(diff<1)return 'just now';if(diff<60)return diff+'m ago';if(diff<1440)return Math.floor(diff/60)+'h ago';return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function dtLocalNow(){const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16);}
+function dateInputToTs(val){if(!val)return Date.now();return new Date(val+(val.length===10?'T00:00':'')).getTime();}
 
-// ═══════════════════════════════════════════════════════════
-//  HELPERS
-// ═══════════════════════════════════════════════════════════
-function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
-const fmt  = n => '$' + Math.round(n||0).toLocaleString();
-const fmtK = n => { const v=Math.abs(n||0); return v>=1000000?'$'+(v/1e6).toFixed(1)+'m':v>=1000?'$'+(v/1000).toFixed(0)+'k':'$'+Math.round(v); };
-const isMil = a => /\bAPO\b|\bFPO\b|PSC\s+\d|CMR\s+\d/.test(a||'');
-const isVA  = a => /,\s*VA[\s,\d]/.test(a||'');
-const isOOS = a => !(a||'').includes(', KS') && !(a||'').toLowerCase().includes('manhattan, ks');
-const dayStart = ts => { const d=new Date(ts); d.setHours(0,0,0,0); return d.getTime(); };
-const todayStart = () => dayStart(Date.now());
-const todayEnd   = () => todayStart() + 86400000 - 1;
+// ── Scoring ──
+function score(p){let s=0;if(isMil(p.mailing))s+=40;else if(isVA(p.mailing))s+=25;else if(isOOS(p.mailing))s+=15;if(p.value>=180000&&p.value<=320000)s+=15;if(p.contacted)s+=5;if(p.activeRental)s+=5;return Math.min(s,100);}
+function scoreColor(s){if(s>=55)return '#e05252';if(s>=40)return '#e8813a';if(s>=25)return '#f5a623';return '#4a5870';}
+function scoreTier(s){if(s>=55)return 'Highest Priority';if(s>=40)return 'High Priority';if(s>=25)return 'Moderate';return 'Low';}
 
-function firstName(owner) {
-  const parts = owner.split(',');
-  return parts.length > 1 ? parts[1].trim().split(/\s+/)[0] : owner.split(/\s+/)[0];
-}
+// ── Reminder Utils ──
+function activeReminders(p){return(p.reminders||[]).filter(r=>!r.done);}
+function nextReminderTs(p){const a=activeReminders(p);if(!a.length)return Infinity;return Math.min(...a.map(r=>r.snoozedTo||r.dueTs));}
+function isDueToday(r){const e=r.snoozedTo||r.dueTs;return e>=todayStart()&&e<=todayEnd();}
+function isOverdue(r){return(r.snoozedTo||r.dueTs)<todayStart();}
+function reminderStatusForProp(p){const a=activeReminders(p);if(a.some(r=>isOverdue(r)))return 'overdue';if(a.some(r=>isDueToday(r)))return 'today';if(a.length>0)return 'upcoming';return null;}
+function countTodayReminders(){let n=0;properties.forEach(p=>activeReminders(p).forEach(r=>{if(isOverdue(r)||isDueToday(r))n++;}));return n;}
 
-function tsLabel(ts) {
-  if (!ts) return '';
-  const d = new Date(ts), now = new Date();
-  const diff = Math.floor((now - d) / 60000);
-  if (diff < 1)    return 'just now';
-  if (diff < 60)   return diff + 'm ago';
-  if (diff < 1440) return Math.floor(diff/60) + 'h ago';
-  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-}
-
-function dtLocalNow() {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0,16);
-}
-
-function dateInputToTs(val) {
-  if (!val) return Date.now();
-  return new Date(val + (val.length===10?'T00:00':'')).getTime();
-}
-
-// ═══════════════════════════════════════════════════════════
-//  SCORING
-// ═══════════════════════════════════════════════════════════
-function score(p) {
-  let s = 0;
-  if (isMil(p.mailing))                          s += 40;
-  else if (isVA(p.mailing))                      s += 25;
-  else if (isOOS(p.mailing))                     s += 15;
-  if (p.value >= 180000 && p.value <= 320000)    s += 15;
-  if (p.contacted)                               s += 5;
-  if (p.activeRental)                            s += 5;
-  return Math.min(s, 100);
-}
-function scoreColor(s) {
-  if (s >= 55) return '#e05252';
-  if (s >= 40) return '#e8813a';
-  if (s >= 25) return '#f5a623';
-  return '#4a5870';
-}
-function scoreTier(s) {
-  if (s >= 55) return 'Highest Priority';
-  if (s >= 40) return 'High Priority';
-  if (s >= 25) return 'Moderate';
-  return 'Low';
-}
-
-// ═══════════════════════════════════════════════════════════
-//  REMINDER UTILS
-// ═══════════════════════════════════════════════════════════
-function activeReminders(p) {
-  return (p.reminders||[]).filter(r => !r.done);
-}
-function nextReminderTs(p) {
-  const active = activeReminders(p);
-  if (!active.length) return Infinity;
-  const ts = active.map(r => r.snoozedTo || r.dueTs);
-  return Math.min(...ts);
-}
-function isDueToday(r) {
-  const eff = r.snoozedTo || r.dueTs;
-  return eff >= todayStart() && eff <= todayEnd();
-}
-function isOverdue(r) {
-  const eff = r.snoozedTo || r.dueTs;
-  return eff < todayStart();
-}
-function reminderStatusForProp(p) {
-  const active = activeReminders(p);
-  if (active.some(r => isOverdue(r)))  return 'overdue';
-  if (active.some(r => isDueToday(r))) return 'today';
-  if (active.length > 0)               return 'upcoming';
-  return null;
-}
-function countTodayReminders() {
-  let n = 0;
-  properties.forEach(p => {
-    activeReminders(p).forEach(r => {
-      if (isOverdue(r) || isDueToday(r)) n++;
-    });
-  });
-  return n;
-}
-
-// ═══════════════════════════════════════════════════════════
-//  FILTER / SORT / SEARCH
-// ═══════════════════════════════════════════════════════════
-function getFiltered() {
-  const q = document.getElementById('tb-search').value.toLowerCase().trim();
-  return properties.filter(p => {
-    if (activeFilter === 'today') {
-      // show props with overdue or today reminders
-      if (!activeReminders(p).some(r => isOverdue(r) || isDueToday(r))) return false;
-    } else if (activeFilter !== 'all') {
-      if (p.status !== activeFilter) return false;
-    }
-    if (q) {
-      const hay = [p.address, p.owner, p.mailing, (p.tags||[]).join(' '), p.notes].join(' ').toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
+// ── Filter/Sort/Search ──
+function getFiltered(){
+  const q=document.getElementById('tb-search').value.toLowerCase().trim();
+  return properties.filter(p=>{
+    if(activeFilter==='today'){if(!activeReminders(p).some(r=>isOverdue(r)||isDueToday(r)))return false;}
+    else if(activeFilter!=='all'){if(p.status!==activeFilter)return false;}
+    if(q){const hay=[p.address,p.owner,p.mailing,(p.tags||[]).join(' '),p.notes].join(' ').toLowerCase();if(!hay.includes(q))return false;}
     return true;
   });
 }
-
-function getSorted(list) {
-  const order = { hot:0, warm:1, contacted:2, new:3, under_contract:4, closed:5, dead:6 };
-  if (sortMode === 'score')         return [...list].sort((a,b) => score(b)-score(a));
-  if (sortMode === 'value')         return [...list].sort((a,b) => b.value-a.value);
-  if (sortMode === 'last_outreach') return [...list].sort((a,b) => {
-    const la = (a.outreach||[]).at(-1)?.ts || 0;
-    const lb = (b.outreach||[]).at(-1)?.ts || 0;
-    return lb - la;
-  });
-  if (sortMode === 'next_reminder') return [...list].sort((a,b) => nextReminderTs(a)-nextReminderTs(b));
-  if (sortMode === 'status')        return [...list].sort((a,b) => (order[a.status]||9)-(order[b.status]||9));
+function getSorted(list){
+  const order={hot:0,warm:1,contacted:2,new:3,under_contract:4,closed:5,dead:6};
+  if(sortMode==='score')return[...list].sort((a,b)=>score(b)-score(a));
+  if(sortMode==='value')return[...list].sort((a,b)=>b.value-a.value);
+  if(sortMode==='last_outreach')return[...list].sort((a,b)=>{const la=(a.outreach||[]).at(-1)?.ts||0,lb=(b.outreach||[]).at(-1)?.ts||0;return lb-la;});
+  if(sortMode==='next_reminder')return[...list].sort((a,b)=>nextReminderTs(a)-nextReminderTs(b));
+  if(sortMode==='status')return[...list].sort((a,b)=>(order[a.status]||9)-(order[b.status]||9));
   return list;
 }
+function setFilter(f,btn){
+  activeFilter=f;
+  document.querySelectorAll('.filt').forEach(b=>{b.className='filt';});
+  if(btn)btn.classList.add('act-'+f);
+  if(f==='today'){renderTodayView();document.getElementById('today-overlay').classList.add('on');todayOpen=true;}
+  else{document.getElementById('today-overlay').classList.remove('on');todayOpen=false;}
+  renderMarkers();renderList();
+}
+function onSearch(){renderMarkers();renderList();}
+function onSortChange(){sortMode=document.getElementById('sort-sel').value;renderList();}
 
-function setFilter(f, btn) {
-  activeFilter = f;
-  document.querySelectorAll('.filt').forEach(b => { b.className = 'filt'; });
-  if (btn) btn.classList.add('act-' + f);
-  if (f === 'today') {
-    // show today overlay
-    renderTodayView();
-    document.getElementById('today-overlay').classList.add('on');
-    todayOpen = true;
-  } else {
-    document.getElementById('today-overlay').classList.remove('on');
-    todayOpen = false;
-  }
-  renderMarkers();
-  renderList();
+// ── Map ──
+let map,markers={},clusterGroup=null;
+function initMap(){
+  map=L.map('map',{zoomControl:true}).setView([39.1880,-96.5790],14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:19}).addTo(map);
+}
+function makePin(p){
+  const cfg=STATUS_CFG[p.status]||STATUS_CFG.new,sel=p.id===selectedId;
+  const remSt=reminderStatusForProp(p),dot=remSt==='overdue'?'🔴':remSt==='today'?'⏰':'';
+  return L.divIcon({className:'pin-wrap',html:`<div class="pin-pill${sel?' sel':''}" style="background:${sel?'#fff':cfg.color};color:${sel?cfg.color:'#fff'};border-color:${cfg.color}">${dot}${fmtK(p.value||0)}</div>`,iconAnchor:[0,24]});
 }
 
-function onSearch() { renderMarkers(); renderList(); }
-function onSortChange() { sortMode = document.getElementById('sort-sel').value; renderList(); }
-
-// ═══════════════════════════════════════════════════════════
-//  MAP
-// ═══════════════════════════════════════════════════════════
-let map;
-let markers = {};
-let clusterGroup = null;
-
-function initMap() {
-  map = L.map('map', { zoomControl: true }).setView([39.1880, -96.5790], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
-  }).addTo(map);
+// ── FIX B008: updateMarkerIcon refreshes a single marker in place without full rebuild ──
+function updateMarkerIcon(p){
+  const m=markers[p.id];
+  if(!m)return;
+  m.setIcon(makePin(p));
+  if(clusterGroup)clusterGroup.refreshClusters(m);
 }
 
-function makePin(p) {
-  const cfg = STATUS_CFG[p.status] || STATUS_CFG.new;
-  const sel = p.id === selectedId;
-  const remSt = reminderStatusForProp(p);
-  const dot = remSt === 'overdue' ? '🔴' : remSt === 'today' ? '⏰' : '';
-  return L.divIcon({
-    className: 'pin-wrap',
-    html: `<div class="pin-pill${sel?' sel':''}" style="background:${sel?'#fff':cfg.color};color:${sel?cfg.color:'#fff'};border-color:${cfg.color}">${dot}${fmtK(p.value||0)}</div>`,
-    iconAnchor: [0, 24],
-  });
-}
-
-function renderMarkers() {
-  const filtered = getFiltered();
-  const useCluster = properties.length > CLUSTER_THRESHOLD;
-
-  // Clear existing
-  if (clusterGroup) { map.removeLayer(clusterGroup); clusterGroup = null; }
-  Object.values(markers).forEach(m => map.removeLayer(m));
-  markers = {};
-
-  if (useCluster) {
-    clusterGroup = L.markerClusterGroup({ maxClusterRadius: 50 });
-    filtered.forEach(p => {
-      const m = L.marker([p.lat, p.lng], { icon: makePin(p) });
-      m.on('click', () => selectProp(p.id));
-      clusterGroup.addLayer(m);
-      markers[p.id] = m;
-    });
+function renderMarkers(){
+  const filtered=getFiltered(),useCluster=properties.length>CLUSTER_THRESHOLD;
+  if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
+  Object.values(markers).forEach(m=>map.removeLayer(m));
+  markers={};
+  if(useCluster){
+    clusterGroup=L.markerClusterGroup({maxClusterRadius:50});
+    filtered.forEach(p=>{const m=L.marker([p.lat,p.lng],{icon:makePin(p)});m.on('click',()=>selectProp(p.id));clusterGroup.addLayer(m);markers[p.id]=m;});
     map.addLayer(clusterGroup);
-  } else {
-    filtered.forEach(p => {
-      const m = L.marker([p.lat, p.lng], { icon: makePin(p), zIndexOffset: p.id===selectedId?1000:0 });
-      m.on('click', () => selectProp(p.id));
-      m.addTo(map);
-      markers[p.id] = m;
-    });
+  }else{
+    filtered.forEach(p=>{const m=L.marker([p.lat,p.lng],{icon:makePin(p),zIndexOffset:p.id===selectedId?1000:0});m.on('click',()=>selectProp(p.id));m.addTo(map);markers[p.id]=m;});
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-//  LEAD LIST
-// ═══════════════════════════════════════════════════════════
-function renderList() {
-  const filtered = getFiltered();
-  const sorted = getSorted(filtered);
-  document.getElementById('list-count').textContent = `${filtered.length} of ${properties.length} props`;
-
-  const bulkMode = selectedIds.size > 0;
-  const wrap = document.getElementById('list-scroll');
-  if (bulkMode) wrap.classList.add('bulk-mode'); else wrap.classList.remove('bulk-mode');
-  document.getElementById('bulk-bar').classList.toggle('on', bulkMode);
-  document.getElementById('bulk-count').textContent = `${selectedIds.size} selected`;
-
-  wrap.innerHTML = sorted.map(p => {
-    const cfg = STATUS_CFG[p.status] || STATUS_CFG.new;
-    const sc = score(p), scc = scoreColor(sc);
-    const remSt = reminderStatusForProp(p);
-    const remColor = remSt==='overdue'?'#e05252':remSt==='today'?'#f5a623':remSt==='upcoming'?'#3db87a':'transparent';
-    const tagChips = (p.tags||[]).slice(0,3).map(t=>`<span class="lr-tag-chip">${esc(t)}</span>`).join('');
-    const checked = selectedIds.has(p.id);
-    return `<div class="lead-row${p.id===selectedId?' sel':''}${checked?' checked':''}" onclick="onRowClick(event,'${esc(p.id)}')">
+// ── Lead List ──
+function renderList(){
+  const filtered=getFiltered(),sorted=getSorted(filtered);
+  document.getElementById('list-count').textContent=`${filtered.length} of ${properties.length} props`;
+  const bulkMode=selectedIds.size>0;
+  const wrap=document.getElementById('list-scroll');
+  if(bulkMode)wrap.classList.add('bulk-mode');else wrap.classList.remove('bulk-mode');
+  document.getElementById('bulk-bar').classList.toggle('on',bulkMode);
+  document.getElementById('bulk-count').textContent=`${selectedIds.size} selected`;
+  wrap.innerHTML=sorted.map(p=>{
+    const cfg=STATUS_CFG[p.status]||STATUS_CFG.new,sc=score(p),scc=scoreColor(sc);
+    const remSt=reminderStatusForProp(p);
+    const remColor=remSt==='overdue'?'#e05252':remSt==='today'?'#f5a623':remSt==='upcoming'?'#3db87a':'transparent';
+    const tagChips=(p.tags||[]).slice(0,3).map(t=>`<span class="lr-tag-chip">${esc(t)}</span>`).join('');
+    const checked=selectedIds.has(p.id);
+    return`<div class="lead-row${p.id===selectedId?' sel':''}${checked?' checked':''}" onclick="onRowClick(event,'${esc(p.id)}')">
       <input type="checkbox" class="lr-check" ${checked?'checked':''} onclick="onCheckClick(event,'${esc(p.id)}')" aria-label="Select ${esc(p.address)}">
-      <div class="lr-top">
-        <div class="lr-addr" title="${esc(p.address)}">${esc(p.address)}</div>
-        ${p.value?`<div class="lr-val">${fmt(p.value)}</div>`:''}
-      </div>
+      <div class="lr-top"><div class="lr-addr" title="${esc(p.address)}">${esc(p.address)}</div>${p.value?`<div class="lr-val">${fmt(p.value)}</div>`:''}</div>
       <div class="lr-owner" title="${esc(p.owner)}">${esc(p.owner||'Unknown Owner')}</div>
       <div class="lr-bottom">
         <div class="lr-score" style="background:${scc}20;color:${scc}">${sc}</div>
         <span class="lr-badge" style="background:${cfg.bg};color:${cfg.color}">${cfg.label}</span>
         ${tagChips}
         ${remSt?`<div class="lr-reminder-dot" style="background:${remColor}" title="${remSt} reminder"></div>`:''}
-      </div>
-    </div>`;
+      </div></div>`;
   }).join('');
-
-  updateFooterStats();
-  updateTodayBadge();
+  updateFooterStats();updateTodayBadge();
 }
 
-function onRowClick(e, id) {
-  if (e.target.type === 'checkbox') return;
-  if (selectedIds.size > 0) {
-    // In bulk mode, clicking row toggles checkbox
-    toggleSelect(id);
-    return;
-  }
-  selectProp(id);
-}
-function onCheckClick(e, id) {
-  e.stopPropagation();
-  toggleSelect(id);
-}
-function toggleSelect(id) {
-  if (selectedIds.has(id)) selectedIds.delete(id);
-  else selectedIds.add(id);
-  renderList();
-}
-function toggleSelectAll(checked) {
-  if (checked) getFiltered().forEach(p => selectedIds.add(p.id));
+function onRowClick(e,id){if(e.target.type==='checkbox')return;if(selectedIds.size>0){toggleSelect(id);return;}selectProp(id);}
+function onCheckClick(e,id){e.stopPropagation();toggleSelect(id);}
+function toggleSelect(id){if(selectedIds.has(id))selectedIds.delete(id);else selectedIds.add(id);renderList();}
+
+// ── FIX B001: clearSelection always resets the checkbox DOM element ──
+function toggleSelectAll(checked){
+  if(checked)getFiltered().forEach(p=>selectedIds.add(p.id));
   else selectedIds.clear();
   renderList();
 }
-function clearSelection() {
+function clearSelection(){
   selectedIds.clear();
-  document.getElementById('bulk-select-all').checked = false;
+  const cb=document.getElementById('bulk-select-all');
+  if(cb)cb.checked=false;  // explicit reset — fixes B001
   renderList();
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SELECTION
-// ═══════════════════════════════════════════════════════════
-function selectProp(id) {
-  selectedId = id;
-  activeTab = 'overview';
-  renderMarkers();
-  renderList();
-  renderPanel();
-  const p = properties.find(x => x.id === id);
-  if (p) map.panTo([p.lat, p.lng], { animate: true, duration: 0.4 });
-}
+// ── Selection ──
+function selectProp(id){selectedId=id;activeTab='overview';renderMarkers();renderList();renderPanel();const p=properties.find(x=>x.id===id);if(p)map.panTo([p.lat,p.lng],{animate:true,duration:0.4});}
+function deselectProp(){selectedId=null;renderMarkers();renderList();document.getElementById('dash-empty').style.display='';document.getElementById('prop-panel').style.display='none';}
 
-function deselectProp() {
-  selectedId = null;
-  renderMarkers();
-  renderList();
-  document.getElementById('dash-empty').style.display = '';
-  document.getElementById('prop-panel').style.display = 'none';
-}
-
-// ═══════════════════════════════════════════════════════════
-//  PROPERTY PANEL
-// ═══════════════════════════════════════════════════════════
-function renderPanel() {
-  const p = properties.find(x => x.id === selectedId);
-  if (!p) return;
-  document.getElementById('dash-empty').style.display = 'none';
-  document.getElementById('prop-panel').style.display = 'flex';
-
-  // Header
-  const cfg = STATUS_CFG[p.status] || STATUS_CFG.new;
-  const badge = document.getElementById('pp-badge');
-  badge.textContent = '● ' + cfg.label.toUpperCase();
-  badge.style.cssText = `background:${cfg.bg};color:${cfg.color};border:1px solid ${cfg.color}40;font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;letter-spacing:.05em;`;
-  document.getElementById('pp-addr').textContent = p.address;
-  document.getElementById('pp-meta').textContent =
-    `${p.city||'Manhattan, KS'} · ${isMil(p.mailing)?'🎖 Military':isVA(p.mailing)?'📍 Virginia':'Residential'} · ID ${p.id} · ${p.lat.toFixed(4)},${p.lng.toFixed(4)}`;
-
-  // Tags
-  const tagsEl = document.getElementById('pp-tags');
-  tagsEl.innerHTML = (p.tags||[]).map(t =>
-    `<span class="pp-tag">${esc(t)}<span class="pp-tag-x" onclick="removeTag('${esc(p.id)}','${esc(t)}')" title="Remove tag">×</span></span>`
-  ).join('') + `<button id="pp-add-tag" onclick="openTagModal('${esc(p.id)}')">+ tag</button>`;
-
-  // Tabs
-  document.querySelectorAll('.pp-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
-
+// ── Property Panel ──
+function renderPanel(){
+  const p=properties.find(x=>x.id===selectedId);if(!p)return;
+  document.getElementById('dash-empty').style.display='none';
+  document.getElementById('prop-panel').style.display='flex';
+  const cfg=STATUS_CFG[p.status]||STATUS_CFG.new;
+  const badge=document.getElementById('pp-badge');
+  badge.textContent='● '+cfg.label.toUpperCase();
+  badge.style.cssText=`background:${cfg.bg};color:${cfg.color};border:1px solid ${cfg.color}40;font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;letter-spacing:.05em;`;
+  document.getElementById('pp-addr').textContent=p.address;
+  document.getElementById('pp-meta').textContent=`${p.city||'Manhattan, KS'} · ${isMil(p.mailing)?'🎖 Military':isVA(p.mailing)?'📍 Virginia':'Residential'} · ID ${p.id} · ${p.lat.toFixed(4)},${p.lng.toFixed(4)}`;
+  const tagsEl=document.getElementById('pp-tags');
+  tagsEl.innerHTML=(p.tags||[]).map(t=>`<span class="pp-tag">${esc(t)}<span class="pp-tag-x" onclick="removeTag('${esc(p.id)}','${esc(t)}')" title="Remove tag">×</span></span>`).join('')+`<button id="pp-add-tag" onclick="openTagModal('${esc(p.id)}')">+ tag</button>`;
+  document.querySelectorAll('.pp-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===activeTab));
   renderTabContent(p);
-
-  // Footer
-  document.getElementById('pf-cont').textContent = properties.filter(x=>x.contacted).length;
-  document.getElementById('pf-offers').textContent = properties.filter(x=>x.offerMade).length;
-  document.getElementById('pf-equity').textContent = fmtK(properties.reduce((s,x)=>s+x.value*0.22,0));
+  document.getElementById('pf-cont').textContent=properties.filter(x=>x.contacted).length;
+  document.getElementById('pf-offers').textContent=properties.filter(x=>x.offerMade).length;
+  document.getElementById('pf-equity').textContent=fmtK(properties.reduce((s,x)=>s+x.value*0.22,0));
+}
+function switchTab(tab){activeTab=tab;const p=properties.find(x=>x.id===selectedId);if(!p)return;document.querySelectorAll('.pp-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));renderTabContent(p);}
+function renderTabContent(p){
+  const body=document.getElementById('pp-body');
+  if(activeTab==='overview')body.innerHTML=tabOverview(p);
+  else if(activeTab==='notes')body.innerHTML=tabNotes(p);
+  else if(activeTab==='outreach')body.innerHTML=tabOutreach(p);
+  else if(activeTab==='reminders')body.innerHTML=tabReminders(p);
 }
 
-function switchTab(tab) {
-  activeTab = tab;
-  const p = properties.find(x => x.id === selectedId);
-  if (!p) return;
-  document.querySelectorAll('.pp-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
-  renderTabContent(p);
-}
-
-function renderTabContent(p) {
-  const body = document.getElementById('pp-body');
-  if (activeTab === 'overview')   body.innerHTML = tabOverview(p);
-  else if (activeTab === 'notes') body.innerHTML = tabNotes(p);
-  else if (activeTab === 'outreach') body.innerHTML = tabOutreach(p);
-  else if (activeTab === 'reminders') body.innerHTML = tabReminders(p);
-}
-
-// ── Overview Tab ──
-function tabOverview(p) {
-  const sc = score(p), scc = scoreColor(sc);
-  const offer = p.offerAmount ? parseFloat(p.offerAmount.replace(/[$,]/g,''))||0 : p.value*OFFER_PCT;
-  const equity = p.value - offer;
-  const dscr = offer * LOAN_LTV;
-  const down = offer * (1-LOAN_LTV);
-  const monthly = Math.round(p.value * RENT_RATIO);
-  const status = Object.entries(STATUS_CFG).map(([k,v]) =>
-    `<button class="s-btn" onclick="setProp('${esc(p.id)}','status','${k}')"
-      style="background:${p.status===k?v.bg:'transparent'};color:${p.status===k?v.color:'var(--text3)'};border-color:${p.status===k?v.color:'var(--border2)'}">
-      ${v.label}</button>`).join('');
-  const sigs = [
-    {label:'Military APO/FPO', on:isMil(p.mailing), pts:40},
-    {label:'Virginia address',  on:!isMil(p.mailing)&&isVA(p.mailing), pts:25},
-    {label:'Out-of-state',      on:isOOS(p.mailing), pts:15},
-    {label:'$180k–$320k',       on:p.value>=180000&&p.value<=320000, pts:15},
-    {label:'In contact',        on:!!p.contacted, pts:5},
-    {label:'Active rental',     on:!!p.activeRental, pts:5},
+function tabOverview(p){
+  const sc=score(p),scc=scoreColor(sc);
+  const monthly=Math.round(p.value*RENT_RATIO);
+  const status=Object.entries(STATUS_CFG).map(([k,v])=>`<button class="s-btn" onclick="setProp('${esc(p.id)}','status','${k}')" style="background:${p.status===k?v.bg:'transparent'};color:${p.status===k?v.color:'var(--text3)'};border-color:${p.status===k?v.color:'var(--border2)'}">${v.label}</button>`).join('');
+  const sigs=[
+    {label:'Military APO/FPO',on:isMil(p.mailing),pts:40},
+    {label:'Virginia address',on:!isMil(p.mailing)&&isVA(p.mailing),pts:25},
+    {label:'Out-of-state',on:isOOS(p.mailing),pts:15},
+    {label:'$180k–$320k',on:p.value>=180000&&p.value<=320000,pts:15},
+    {label:'In contact',on:!!p.contacted,pts:5},
+    {label:'Active rental',on:!!p.activeRental,pts:5},
   ].map(s=>`<div class="sig ${s.on?'on':'off'}"><div class="sig-dot"></div><span>${s.label}</span><span class="sig-pts">+${s.pts}</span></div>`).join('');
-
-  const offerCalc = p.offerAmount ? `<div class="offer-calc">
-    Spread: <span>${fmt(p.value-(parseFloat(p.offerAmount.replace(/[$,]/g,''))||0))}</span> below appraisal &nbsp;·&nbsp;
-    Equity at offer: <span>${fmt((parseFloat(p.offerAmount.replace(/[$,]/g,''))||p.value*OFFER_PCT)*(1-LOAN_LTV))}</span>
-  </div>` : '';
-
-  return `
-    <div>
-      <div class="sec-lbl">Deal Numbers</div>
-      <div class="kpi-grid">
-        <div class="kpi green"><div class="kpi-lbl">Appraised Value</div><div class="kpi-v green">${fmt(p.value)}</div><div class="kpi-sub">county assessed</div></div>
-        <div class="kpi amber"><div class="kpi-lbl">Target Offer (${Math.round(OFFER_PCT*100)}%)</div><div class="kpi-v amber">${fmt(p.value*OFFER_PCT)}</div><div class="kpi-sub">${Math.round((1-OFFER_PCT)*100)}% below market</div></div>
-        <div class="kpi red"><div class="kpi-lbl">Day-1 Equity</div><div class="kpi-v red">${fmt(p.value*(1-OFFER_PCT))}</div><div class="kpi-sub">at offer price</div></div>
-        <div class="kpi blue"><div class="kpi-lbl">DSCR Loan (${Math.round(LOAN_LTV*100)}%)</div><div class="kpi-v blue">${fmt(p.value*OFFER_PCT*LOAN_LTV)}</div><div class="kpi-sub">down: ${fmt(p.value*OFFER_PCT*(1-LOAN_LTV))}</div></div>
-        <div class="kpi purple"><div class="kpi-lbl">Est. Rent / mo</div><div class="kpi-v purple">${fmt(monthly)}</div><div class="kpi-sub">~${(RENT_RATIO*100).toFixed(1)}% ratio</div></div>
-        <div class="kpi orange"><div class="kpi-lbl">Est. Cash Flow</div><div class="kpi-v orange">$300–$450</div><div class="kpi-sub">after DSCR svc</div></div>
-      </div>
+  const offerCalc=p.offerAmount?`<div class="offer-calc">Spread: <span>${fmt(p.value-(parseFloat(p.offerAmount.replace(/[$,]/g,''))||0))}</span> below appraisal &nbsp;·&nbsp; Equity at offer: <span>${fmt((parseFloat(p.offerAmount.replace(/[$,]/g,''))||p.value*OFFER_PCT)*(1-LOAN_LTV))}</span></div>`:'';
+  return`
+    <div><div class="sec-lbl">Deal Numbers</div>
+    <div class="kpi-grid">
+      <div class="kpi green"><div class="kpi-lbl">Appraised Value</div><div class="kpi-v green">${fmt(p.value)}</div><div class="kpi-sub">county assessed</div></div>
+      <div class="kpi amber"><div class="kpi-lbl">Target Offer (${Math.round(OFFER_PCT*100)}%)</div><div class="kpi-v amber">${fmt(p.value*OFFER_PCT)}</div><div class="kpi-sub">${Math.round((1-OFFER_PCT)*100)}% below market</div></div>
+      <div class="kpi red"><div class="kpi-lbl">Day-1 Equity</div><div class="kpi-v red">${fmt(p.value*(1-OFFER_PCT))}</div><div class="kpi-sub">at offer price</div></div>
+      <div class="kpi blue"><div class="kpi-lbl">DSCR Loan (${Math.round(LOAN_LTV*100)}%)</div><div class="kpi-v blue">${fmt(p.value*OFFER_PCT*LOAN_LTV)}</div><div class="kpi-sub">down: ${fmt(p.value*OFFER_PCT*(1-LOAN_LTV))}</div></div>
+      <div class="kpi purple"><div class="kpi-lbl">Est. Rent / mo</div><div class="kpi-v purple">${fmt(monthly)}</div><div class="kpi-sub">~${(RENT_RATIO*100).toFixed(1)}% ratio</div></div>
+      <div class="kpi orange"><div class="kpi-lbl">Est. Cash Flow</div><div class="kpi-v orange">$300–$450</div><div class="kpi-sub">after DSCR svc</div></div>
+    </div></div>
+    <div><div class="sec-lbl">Motivated Seller Score</div>
+    <div class="score-block"><div class="sb-top"><div class="sb-num" style="color:${scc}">${sc}</div>
+    <div class="sb-right"><div class="sb-track"><div class="sb-fill" style="width:${sc}%;background:${scc}"></div></div>
+    <div class="sb-tier" style="color:${scc}">${scoreTier(sc)}</div></div></div>
+    <div class="sb-sigs">${sigs}</div></div></div>
+    <div><div class="sec-lbl">Owner</div>
+    <div class="owner-block"><div class="ob-name">${esc(p.owner||'Unknown')}</div>
+    <div class="ob-mail">${esc(p.mailing||'No mailing address')}</div>
+    <div class="ob-tags">
+      ${isMil(p.mailing)?'<span class="ob-tag" style="color:#e05252;border-color:rgba(224,82,82,.3);background:rgba(224,82,82,.1)">🎖 Active Military</span>':''}
+      ${isVA(p.mailing)?'<span class="ob-tag" style="color:#f5a623;border-color:rgba(245,166,35,.3);background:rgba(245,166,35,.1)">📍 Virginia</span>':''}
+      ${isOOS(p.mailing)&&!isMil(p.mailing)?'<span class="ob-tag" style="color:#4a9eff;border-color:rgba(74,158,255,.3);background:rgba(74,158,255,.1)">✈ Out-of-State</span>':''}
     </div>
-    <div>
-      <div class="sec-lbl">Motivated Seller Score</div>
-      <div class="score-block">
-        <div class="sb-top">
-          <div class="sb-num" style="color:${scc}">${sc}</div>
-          <div class="sb-right">
-            <div class="sb-track"><div class="sb-fill" style="width:${sc}%;background:${scc}"></div></div>
-            <div class="sb-tier" style="color:${scc}">${scoreTier(sc)}</div>
-          </div>
-        </div>
-        <div class="sb-sigs">${sigs}</div>
-      </div>
-    </div>
-    <div>
-      <div class="sec-lbl">Owner</div>
-      <div class="owner-block">
-        <div class="ob-name">${esc(p.owner||'Unknown')}</div>
-        <div class="ob-mail">${esc(p.mailing||'No mailing address')}</div>
-        <div class="ob-tags">
-          ${isMil(p.mailing)?'<span class="ob-tag" style="color:#e05252;border-color:rgba(224,82,82,.3);background:rgba(224,82,82,.1)">🎖 Active Military</span>':''}
-          ${isVA(p.mailing)?'<span class="ob-tag" style="color:#f5a623;border-color:rgba(245,166,35,.3);background:rgba(245,166,35,.1)">📍 Virginia</span>':''}
-          ${isOOS(p.mailing)&&!isMil(p.mailing)?'<span class="ob-tag" style="color:#4a9eff;border-color:rgba(74,158,255,.3);background:rgba(74,158,255,.1)">✈ Out-of-State</span>':''}
-        </div>
-        <button class="script-btn" onclick="openScript()">📞 Generate Call Script</button>
-      </div>
-    </div>
-    <div>
-      <div class="sec-lbl">Pipeline Status</div>
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px;">
-        <div class="status-grid">${status}</div>
-      </div>
-    </div>
-    <div>
-      <div class="sec-lbl">Offer Tracking</div>
-      <div class="offer-block">
-        <input class="offer-inp" type="text" placeholder="Offer amount e.g. 191100"
-          value="${esc(p.offerAmount||'')}" oninput="setProp('${esc(p.id)}','offerAmount',this.value)">
-        ${offerCalc}
-        <label class="check-row"><input type="checkbox" ${p.contacted?'checked':''} onchange="setProp('${esc(p.id)}','contacted',this.checked)"> Seller contacted</label>
-        <label class="check-row"><input type="checkbox" ${p.offerMade?'checked':''} onchange="setProp('${esc(p.id)}','offerMade',this.checked)"> Offer submitted</label>
-        <label class="check-row"><input type="checkbox" ${p.activeRental?'checked':''} onchange="setProp('${esc(p.id)}','activeRental',this.checked)"> Active rental listing</label>
-      </div>
-    </div>`;
+    <button class="script-btn" onclick="openScript()">📞 Generate Call Script</button></div></div>
+    <div><div class="sec-lbl">Pipeline Status</div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:12px;">
+    <div class="status-grid">${status}</div></div></div>
+    <div><div class="sec-lbl">Offer Tracking</div>
+    <div class="offer-block">
+      <input class="offer-inp" type="text" id="offer-inp-field" placeholder="Offer amount e.g. 191100"
+        value="${esc(p.offerAmount||'')}"
+        onblur="commitOfferAmount('${esc(p.id)}',this.value)"
+        onkeydown="if(event.key==='Enter'){this.blur();}">
+      ${offerCalc}
+      <label class="check-row"><input type="checkbox" ${p.contacted?'checked':''} onchange="setProp('${esc(p.id)}','contacted',this.checked)"> Seller contacted</label>
+      <label class="check-row"><input type="checkbox" ${p.offerMade?'checked':''} onchange="setProp('${esc(p.id)}','offerMade',this.checked)"> Offer submitted</label>
+      <label class="check-row"><input type="checkbox" ${p.activeRental?'checked':''} onchange="setProp('${esc(p.id)}','activeRental',this.checked)"> Active rental listing</label>
+    </div></div>`;
 }
 
-// ── Notes Tab ──
-function tabNotes(p) {
-  const snotes = (p.structuredNotes||[]).slice().reverse().map(n => {
-    const typeColors = {general:'#8594b0',research:'#4a9eff',legal:'#8b5cf6',personal:'#3db87a'};
-    const c = typeColors[n.type]||'#8594b0';
-    return `<div class="snote">
-      <div class="snote-head">
-        <span class="snote-type" style="color:${c};border:1px solid ${c}40;background:${c}15">${n.type}</span>
-        <span class="snote-ts">${tsLabel(n.ts)}</span>
-        <button class="snote-del" onclick="deleteStructuredNote('${esc(p.id)}','${esc(n.id)}')" title="Delete note">×</button>
-      </div>
-      <div class="snote-body">${escNL(n.body)}</div>
-    </div>`;
+function tabNotes(p){
+  const snotes=(p.structuredNotes||[]).slice().reverse().map(n=>{
+    const typeColors={general:'#8594b0',research:'#4a9eff',legal:'#8b5cf6',personal:'#3db87a'};
+    const c=typeColors[n.type]||'#8594b0';
+    return`<div class="snote"><div class="snote-head">
+      <span class="snote-type" style="color:${c};border:1px solid ${c}40;background:${c}15">${n.type}</span>
+      <span class="snote-ts">${tsLabel(n.ts)}</span>
+      <button class="snote-del" onclick="deleteStructuredNote('${esc(p.id)}','${esc(n.id)}')" title="Delete note">×</button>
+    </div><div class="snote-body">${escNL(n.body)}</div></div>`;
   }).join('');
-
-  return `
-    <div>
-      <div class="sec-lbl">Quick Notes</div>
-      <textarea class="quick-notes-area" id="quick-notes-ta" placeholder="Jot anything here — autosaves…" oninput="scheduleAutoSave('${esc(p.id)}')">${esc(p.notes||'')}</textarea>
-      <div class="note-autosave" id="autosave-lbl">Autosaves on pause</div>
-    </div>
-    <div>
-      <div class="sec-lbl">Structured Notes</div>
-      ${snotes || '<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0">No structured notes yet.</div>'}
-      <button class="add-note-btn" onclick="openSnoteModal('${esc(p.id)}')">+ Add structured note</button>
-    </div>`;
+  return`
+    <div><div class="sec-lbl">Quick Notes</div>
+    <textarea class="quick-notes-area" id="quick-notes-ta" placeholder="Jot anything here — autosaves…" oninput="scheduleAutoSave('${esc(p.id)}')">${esc(p.notes||'')}</textarea>
+    <div class="note-autosave" id="autosave-lbl">Autosaves on pause</div></div>
+    <div><div class="sec-lbl">Structured Notes</div>
+    ${snotes||'<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0">No structured notes yet.</div>'}
+    <button class="add-note-btn" onclick="openSnoteModal('${esc(p.id)}')">+ Add structured note</button></div>`;
 }
 
-// ── Outreach Tab ──
-function tabOutreach(p) {
-  const log = (p.outreach||[]).slice().reverse();
-  const tl = log.length ? log.map(o => {
-    const chanIcon = {call:'📞',email:'📧',letter:'✉',text:'💬',visit:'🚗',other:'•'}[o.channel]||'•';
-    const chanColor = {call:'#4a9eff',email:'#f5a623',letter:'#8b5cf6',text:'#3db87a',visit:'#06b6d4',other:'#8594b0'}[o.channel]||'#8594b0';
-    const outColor = {interested:'#3db87a',not_interested:'#e05252',spoke:'#4a9eff',callback:'#f5a623',left_vm:'#e8813a',no_answer:'#4a5870',other:'#8594b0'}[o.outcome]||'#8594b0';
-    const outLabel = {no_answer:'No Answer',left_vm:'Left VM',spoke:'Spoke',interested:'Interested',not_interested:'Not Interested',callback:'Callback',other:'Other'}[o.outcome]||o.outcome;
-    return `<div class="tl-item">
-      <div class="tl-dot" style="background:${chanColor}20;border-color:${chanColor}">${chanIcon}</div>
-      <div class="tl-body">
-        <div class="tl-head">
-          <span class="tl-chan" style="color:${chanColor}">${o.channel}</span>
-          <span class="tl-out" style="color:${outColor};background:${outColor}18">${outLabel}</span>
-          <span class="tl-ts">${tsLabel(o.ts)}</span>
-        </div>
-        ${o.summary?`<div class="tl-summary">${escNL(o.summary)}</div>`:''}
-      </div>
-    </div>`;
-  }).join('') : '<div class="tl-empty">No outreach logged yet.</div>';
-
-  return `
-    <button class="outreach-btn" onclick="openOutreachModal('${esc(p.id)}')">📋 Log Outreach Event</button>
-    <div>
-      <div class="sec-lbl">Activity Timeline</div>
-      <div class="tl">${tl}</div>
-    </div>`;
+function tabOutreach(p){
+  const log=(p.outreach||[]).slice().reverse();
+  const tl=log.length?log.map(o=>{
+    const chanIcon={call:'📞',email:'📧',letter:'✉',text:'💬',visit:'🚗',other:'•'}[o.channel]||'•';
+    const chanColor={call:'#4a9eff',email:'#f5a623',letter:'#8b5cf6',text:'#3db87a',visit:'#06b6d4',other:'#8594b0'}[o.channel]||'#8594b0';
+    const outColor={interested:'#3db87a',not_interested:'#e05252',spoke:'#4a9eff',callback:'#f5a623',left_vm:'#e8813a',no_answer:'#4a5870',other:'#8594b0'}[o.outcome]||'#8594b0';
+    const outLabel={no_answer:'No Answer',left_vm:'Left VM',spoke:'Spoke',interested:'Interested',not_interested:'Not Interested',callback:'Callback',other:'Other'}[o.outcome]||o.outcome;
+    return`<div class="tl-item"><div class="tl-dot" style="background:${chanColor}20;border-color:${chanColor}">${chanIcon}</div>
+    <div class="tl-body"><div class="tl-head"><span class="tl-chan" style="color:${chanColor}">${o.channel}</span>
+    <span class="tl-out" style="color:${outColor};background:${outColor}18">${outLabel}</span>
+    <span class="tl-ts">${tsLabel(o.ts)}</span></div>
+    ${o.summary?`<div class="tl-summary">${escNL(o.summary)}</div>`:''}</div></div>`;
+  }).join(''):'<div class="tl-empty">No outreach logged yet.</div>';
+  return`<button class="outreach-btn" onclick="openOutreachModal('${esc(p.id)}')">📋 Log Outreach Event</button>
+    <div><div class="sec-lbl">Activity Timeline</div><div class="tl">${tl}</div></div>`;
 }
 
-// ── Reminders Tab ──
-function tabReminders(p) {
-  const rems = (p.reminders||[]).slice().sort((a,b)=>(a.snoozedTo||a.dueTs)-(b.snoozedTo||b.dueTs));
-  const items = rems.map(r => {
-    const eff = r.snoozedTo || r.dueTs;
-    const over = !r.done && isOverdue(r);
-    const tod  = !r.done && isDueToday(r);
-    const dueLbl = r.done ? 'Completed' : over ? `Overdue — ${new Date(eff).toLocaleDateString()}` : tod ? `Due Today — ${new Date(eff).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}` : `Due ${new Date(eff).toLocaleDateString()}`;
-    const dueColor = r.done?'var(--text3)':over?'#e05252':tod?'#f5a623':'var(--text2)';
-    return `<div class="rem-item${over?' overdue':tod?' today':''}${r.done?' done':''}">
-      <div class="rem-left">
-        <div class="rem-lbl">${esc(r.label)}</div>
-        <div class="rem-due" style="color:${dueColor}">${dueLbl}${r.snoozedTo?` (snoozed)`:''}${r.channel?` · via ${r.channel}`:''}</div>
-        ${r.note?`<div class="rem-note">${escNL(r.note)}</div>`:''}
-      </div>
+function tabReminders(p){
+  const rems=(p.reminders||[]).slice().sort((a,b)=>(a.snoozedTo||a.dueTs)-(b.snoozedTo||b.dueTs));
+  const items=rems.map(r=>{
+    const eff=r.snoozedTo||r.dueTs,over=!r.done&&isOverdue(r),tod=!r.done&&isDueToday(r);
+    const dueLbl=r.done?'Completed':over?`Overdue — ${new Date(eff).toLocaleDateString()}`:tod?`Due Today — ${new Date(eff).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`:`Due ${new Date(eff).toLocaleDateString()}`;
+    const dueColor=r.done?'var(--text3)':over?'#e05252':tod?'#f5a623':'var(--text2)';
+    return`<div class="rem-item${over?' overdue':tod?' today':''}${r.done?' done':''}">
+      <div class="rem-left"><div class="rem-lbl">${esc(r.label)}</div>
+      <div class="rem-due" style="color:${dueColor}">${dueLbl}${r.snoozedTo?' (snoozed)':''}${r.channel?` · via ${r.channel}`:''}</div>
+      ${r.note?`<div class="rem-note">${escNL(r.note)}</div>`:''}</div>
       <div class="rem-actions">
         ${!r.done?`<button class="rem-btn" onclick="snoozeReminder('${esc(p.id)}','${esc(r.id)}')">😴</button>`:''}
         <button class="rem-btn done-btn" onclick="toggleReminderDone('${esc(p.id)}','${esc(r.id)}')">${r.done?'↩':'✓'}</button>
-      </div>
-    </div>`;
+      </div></div>`;
   }).join('');
-
-  return `
-    <button class="rem-create-btn" onclick="openReminderModal('${esc(p.id)}')">🔔 Create Reminder</button>
-    <div>
-      <div class="sec-lbl">Reminders</div>
-      ${items||'<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0">No reminders set.</div>'}
-    </div>`;
+  return`<button class="rem-create-btn" onclick="openReminderModal('${esc(p.id)}')">🔔 Create Reminder</button>
+    <div><div class="sec-lbl">Reminders</div>
+    ${items||'<div style="font-size:11px;color:var(--text3);font-style:italic;padding:4px 0">No reminders set.</div>'}</div>`;
 }
 
-// ═══════════════════════════════════════════════════════════
-//  MUTATIONS
-// ═══════════════════════════════════════════════════════════
-function setProp(id, key, val) {
+// ── Mutations ──
+
+// ── FIX B004: offer amount saves on blur/Enter only, never on keystroke ──
+function commitOfferAmount(id, val) {
   const p = properties.find(x => x.id === id);
-  if (!p) return;
-  p[key] = val;
+  if (!p || p.offerAmount === val) return; // no change, skip
+  p.offerAmount = val;
   p.updatedTs = Date.now();
-  if (key === 'status') { renderMarkers(); }
-  if (id === selectedId) renderPanel();
-  renderList();
   persistOne(p);
-}
-
-function removeTag(id, tag) {
-  const p = properties.find(x => x.id === id);
-  if (!p) return;
-  p.tags = (p.tags||[]).filter(t => t !== tag);
-  p.updatedTs = Date.now();
-  if (id === selectedId) renderPanel();
-  renderList();
-  persistOne(p);
-}
-
-// ─ Auto-save quick notes ─
-function scheduleAutoSave(id) {
-  document.getElementById('autosave-lbl').textContent = 'Typing…';
-  clearTimeout(autoSaveTimer);
-  autoSaveTimer = setTimeout(() => {
-    const ta = document.getElementById('quick-notes-ta');
-    if (!ta) return;
-    setProp(id, 'notes', ta.value);
-    document.getElementById('autosave-lbl').textContent = 'Saved ' + new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  }, 1000);
-}
-
-// ═══════════════════════════════════════════════════════════
-//  CHIP PICKER HELPER
-// ═══════════════════════════════════════════════════════════
-function pickChip(groupId, btn) {
-  document.getElementById(groupId).querySelectorAll('.chip').forEach(c => c.classList.remove('sel'));
-  btn.classList.add('sel');
-}
-function getChip(groupId) {
-  const sel = document.querySelector(`#${groupId} .chip.sel`);
-  return sel ? sel.dataset.v : '';
-}
-
-// ═══════════════════════════════════════════════════════════
-//  MODALS OPEN/CLOSE
-// ═══════════════════════════════════════════════════════════
-function openModal(id) { document.getElementById(id).classList.add('on'); }
-function closeModal(id) { document.getElementById(id).classList.remove('on'); }
-
-// Click outside to close
-document.addEventListener('click', e => {
-  document.querySelectorAll('.modal-bg.on').forEach(m => {
-    if (e.target === m) m.classList.remove('on');
-  });
-});
-
-// Escape to close modals
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    document.querySelectorAll('.modal-bg.on').forEach(m => m.classList.remove('on'));
+  // Refresh just the offer calc section without full panel re-render
+  const calcEl = document.querySelector('.offer-calc');
+  if (calcEl && val) {
+    const parsed = parseFloat(val.replace(/[$,]/g,'')) || 0;
+    calcEl.innerHTML = `Spread: <span>${fmt(p.value - parsed)}</span> below appraisal &nbsp;·&nbsp; Equity at offer: <span>${fmt(parsed * (1 - LOAN_LTV))}</span>`;
+  } else if (!val && calcEl) {
+    calcEl.remove();
+  } else if (val && !calcEl) {
+    // Need to add calc row — do a targeted re-render of offer block only
+    renderPanel();
   }
-});
-
-// ═══════════════════════════════════════════════════════════
-//  OUTREACH MODAL
-// ═══════════════════════════════════════════════════════════
-function openOutreachModal(id) {
-  outreachTargetId = id;
-  document.getElementById('oc-date').value = dtLocalNow();
-  document.getElementById('oc-summary').value = '';
-  // reset chips
-  pickChip('oc-channel', document.querySelector('#oc-channel .chip'));
-  pickChip('oc-outcome', document.querySelector('#oc-outcome .chip'));
-  pickChip('oc-followup', document.querySelector('#oc-followup .chip'));
-  openModal('outreach-modal');
+  renderList(); // update any score-dependent display
 }
 
-function saveOutreach() {
-  const p = properties.find(x => x.id === outreachTargetId);
-  if (!p) return;
-  const channel = getChip('oc-channel') || 'other';
-  const outcome = getChip('oc-outcome') || 'other';
-  const ts = dateInputToTs(document.getElementById('oc-date').value);
-  const summary = document.getElementById('oc-summary').value.trim();
-  const followup = getChip('oc-followup');
-
-  if (!p.outreach) p.outreach = [];
-  p.outreach.push({ id: uid(), ts, channel, outcome, summary, template: '' });
-
-  // Auto-contact flag
-  if (['call','email','letter','text','visit'].includes(channel)) p.contacted = true;
-
-  // Auto schedule follow-up reminder
-  if (followup) {
-    if (!p.reminders) p.reminders = [];
-    const dueTs = ts + parseInt(followup) * 86400000;
-    p.reminders.push({
-      id: uid(), dueTs, label: `Follow up (${channel}) — ${outcome}`,
-      note: summary.slice(0, 80), done: false, snoozedTo: null, channel,
-    });
+function setProp(id,key,val){
+  const p=properties.find(x=>x.id===id);if(!p)return;
+  p[key]=val;p.updatedTs=Date.now();
+  // FIX B008: update the map marker icon immediately without full renderMarkers()
+  if(key==='status'){
+    updateMarkerIcon(p);
   }
-  p.updatedTs = Date.now();
-  closeModal('outreach-modal');
-  if (outreachTargetId === selectedId) renderPanel();
-  renderList();
-  renderMarkers();
-  persistOne(p);
-  toast('Outreach logged');
-}
-
-// ═══════════════════════════════════════════════════════════
-//  REMINDER MODAL
-// ═══════════════════════════════════════════════════════════
-function openReminderModal(id) {
-  reminderTargetId = id;
-  document.getElementById('rm-label').value = '';
-  document.getElementById('rm-note').value = '';
-  document.getElementById('rm-channel').value = '';
-  // Default: tomorrow
-  const tmr = new Date(); tmr.setDate(tmr.getDate()+1);
-  document.getElementById('rm-due').value = tmr.toISOString().slice(0,10);
-  openModal('reminder-modal');
-  setTimeout(() => document.getElementById('rm-label').focus(), 50);
-}
-
-function saveReminder() {
-  const label = document.getElementById('rm-label').value.trim();
-  if (!label) { toast('Label required'); return; }
-  const p = properties.find(x => x.id === reminderTargetId);
-  if (!p) return;
-  const dueTs = dateInputToTs(document.getElementById('rm-due').value);
-  const note = document.getElementById('rm-note').value.trim();
-  const channel = document.getElementById('rm-channel').value;
-  if (!p.reminders) p.reminders = [];
-  p.reminders.push({ id: uid(), dueTs, label, note, done: false, snoozedTo: null, channel });
-  p.updatedTs = Date.now();
-  closeModal('reminder-modal');
-  if (reminderTargetId === selectedId) renderPanel();
-  renderList();
-  renderMarkers();
-  persistOne(p);
-  toast('Reminder created');
-}
-
-// ─ Snooze ─
-function snoozeReminder(propId, remId) {
-  snoozeTargetId = propId;
-  snoozeReminderId = remId;
-  const p = properties.find(x => x.id === propId);
-  const r = (p?.reminders||[]).find(r => r.id === remId);
-  document.getElementById('snooze-lbl').textContent = r?.label || '';
-  openModal('snooze-modal');
-}
-function doSnooze(days) {
-  const p = properties.find(x => x.id === snoozeTargetId);
-  if (!p) return;
-  const r = (p.reminders||[]).find(r => r.id === snoozeReminderId);
-  if (!r) return;
-  r.snoozedTo = Date.now() + days * 86400000;
-  p.updatedTs = Date.now();
-  closeModal('snooze-modal');
-  if (snoozeTargetId === selectedId) renderPanel();
-  renderList();
-  renderMarkers();
-  persistOne(p);
-  toast(`Snoozed ${days} day${days>1?'s':''}`);
-}
-
-// ─ Toggle done ─
-function toggleReminderDone(propId, remId) {
-  const p = properties.find(x => x.id === propId);
-  if (!p) return;
-  const r = (p.reminders||[]).find(r => r.id === remId);
-  if (!r) return;
-  r.done = !r.done;
-  if (r.done) r.snoozedTo = null;
-  p.updatedTs = Date.now();
-  if (propId === selectedId) renderPanel();
-  renderList();
-  renderMarkers();
-  persistOne(p);
-  toast(r.done ? '✓ Reminder completed' : 'Reminder reopened');
-}
-
-// ═══════════════════════════════════════════════════════════
-//  STRUCTURED NOTES
-// ═══════════════════════════════════════════════════════════
-function openSnoteModal(id) {
-  noteTargetId = id;
-  document.getElementById('sn-body').value = '';
-  pickChip('sn-type', document.querySelector('#sn-type .chip'));
-  openModal('snote-modal');
-  setTimeout(() => document.getElementById('sn-body').focus(), 50);
-}
-function saveStructuredNote() {
-  const body = document.getElementById('sn-body').value.trim();
-  if (!body) { toast('Note body required'); return; }
-  const p = properties.find(x => x.id === noteTargetId);
-  if (!p) return;
-  const type = getChip('sn-type') || 'general';
-  if (!p.structuredNotes) p.structuredNotes = [];
-  p.structuredNotes.push({ id: uid(), ts: Date.now(), type, body });
-  p.updatedTs = Date.now();
-  closeModal('snote-modal');
-  if (noteTargetId === selectedId) renderPanel();
-  persistOne(p);
-  toast('Note saved');
-}
-function deleteStructuredNote(propId, noteId) {
-  const p = properties.find(x => x.id === propId);
-  if (!p) return;
-  p.structuredNotes = (p.structuredNotes||[]).filter(n => n.id !== noteId);
-  p.updatedTs = Date.now();
-  if (propId === selectedId) renderPanel();
-  persistOne(p);
-}
-
-// ═══════════════════════════════════════════════════════════
-//  TAGS
-// ═══════════════════════════════════════════════════════════
-function openTagModal(id) {
-  tagTargetId = id;
-  document.getElementById('tag-inp').value = '';
-  openModal('tag-modal');
-  setTimeout(() => document.getElementById('tag-inp').focus(), 50);
-}
-function saveTag() {
-  const val = document.getElementById('tag-inp').value.trim().toLowerCase();
-  if (!val) { toast('Tag required'); return; }
-  const p = properties.find(x => x.id === tagTargetId);
-  if (!p) return;
-  if (!p.tags) p.tags = [];
-  if (!p.tags.includes(val)) { p.tags.push(val); p.updatedTs = Date.now(); }
-  closeModal('tag-modal');
-  if (tagTargetId === selectedId) renderPanel();
+  if(id===selectedId)renderPanel();
   renderList();
   persistOne(p);
 }
 
-// ═══════════════════════════════════════════════════════════
-//  BULK ACTIONS
-// ═══════════════════════════════════════════════════════════
-function getSelectedProps() {
-  return properties.filter(p => selectedIds.has(p.id));
+function removeTag(id,tag){const p=properties.find(x=>x.id===id);if(!p)return;p.tags=(p.tags||[]).filter(t=>t!==tag);p.updatedTs=Date.now();if(id===selectedId)renderPanel();renderList();persistOne(p);}
+function scheduleAutoSave(id){document.getElementById('autosave-lbl').textContent='Typing…';clearTimeout(autoSaveTimer);autoSaveTimer=setTimeout(()=>{const ta=document.getElementById('quick-notes-ta');if(!ta)return;const p=properties.find(x=>x.id===id);if(!p)return;p.notes=ta.value;p.updatedTs=Date.now();persistOne(p);document.getElementById('autosave-lbl').textContent='Saved '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});},1000);}
+
+// ── Chip Picker ──
+function pickChip(groupId,btn){document.getElementById(groupId).querySelectorAll('.chip').forEach(c=>c.classList.remove('sel'));btn.classList.add('sel');}
+function getChip(groupId){const sel=document.querySelector(`#${groupId} .chip.sel`);return sel?sel.dataset.v:'';}
+
+// ── Modals ──
+function openModal(id){document.getElementById(id).classList.add('on');}
+function closeModal(id){document.getElementById(id).classList.remove('on');}
+document.addEventListener('click',e=>{document.querySelectorAll('.modal-bg.on').forEach(m=>{if(e.target===m)m.classList.remove('on');});});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-bg.on').forEach(m=>m.classList.remove('on'));});
+
+// ── Outreach Modal ──
+function openOutreachModal(id){outreachTargetId=id;document.getElementById('oc-date').value=dtLocalNow();document.getElementById('oc-summary').value='';pickChip('oc-channel',document.querySelector('#oc-channel .chip'));pickChip('oc-outcome',document.querySelector('#oc-outcome .chip'));pickChip('oc-followup',document.querySelector('#oc-followup .chip'));openModal('outreach-modal');}
+function saveOutreach(){
+  const p=properties.find(x=>x.id===outreachTargetId);if(!p)return;
+  const channel=getChip('oc-channel')||'other',outcome=getChip('oc-outcome')||'other';
+  const ts=dateInputToTs(document.getElementById('oc-date').value);
+  const summary=document.getElementById('oc-summary').value.trim();
+  const followup=getChip('oc-followup');
+  if(!p.outreach)p.outreach=[];
+  p.outreach.push({id:uid(),ts,channel,outcome,summary,template:''});
+  if(['call','email','letter','text','visit'].includes(channel))p.contacted=true;
+  if(followup){if(!p.reminders)p.reminders=[];const dueTs=ts+parseInt(followup)*86400000;p.reminders.push({id:uid(),dueTs,label:`Follow up (${channel}) — ${outcome}`,note:summary.slice(0,80),done:false,snoozedTo:null,channel});}
+  p.updatedTs=Date.now();closeModal('outreach-modal');
+  if(outreachTargetId===selectedId)renderPanel();
+  renderList();renderMarkers();persistOne(p);toast('Outreach logged');
 }
 
-// Save undo snapshot
-function pushUndo(label) {
-  undoStack.push({ label, snapshot: JSON.parse(JSON.stringify(getSelectedProps().map(p=>({...p})))), ids: [...selectedIds] });
-  if (undoStack.length > 20) undoStack.shift();
+// ── Reminder Modal ──
+function openReminderModal(id){reminderTargetId=id;document.getElementById('rm-label').value='';document.getElementById('rm-note').value='';document.getElementById('rm-channel').value='';const tmr=new Date();tmr.setDate(tmr.getDate()+1);document.getElementById('rm-due').value=tmr.toISOString().slice(0,10);openModal('reminder-modal');setTimeout(()=>document.getElementById('rm-label').focus(),50);}
+function saveReminder(){
+  const label=document.getElementById('rm-label').value.trim();if(!label){toast('Label required');return;}
+  const p=properties.find(x=>x.id===reminderTargetId);if(!p)return;
+  const dueTs=dateInputToTs(document.getElementById('rm-due').value);
+  const note=document.getElementById('rm-note').value.trim(),channel=document.getElementById('rm-channel').value;
+  if(!p.reminders)p.reminders=[];
+  p.reminders.push({id:uid(),dueTs,label,note,done:false,snoozedTo:null,channel});
+  p.updatedTs=Date.now();closeModal('reminder-modal');
+  if(reminderTargetId===selectedId)renderPanel();
+  renderList();renderMarkers();persistOne(p);toast('Reminder created');
 }
+function snoozeReminder(propId,remId){snoozeTargetId=propId;snoozeReminderId=remId;const p=properties.find(x=>x.id===propId);const r=(p?.reminders||[]).find(r=>r.id===remId);document.getElementById('snooze-lbl').textContent=r?.label||'';openModal('snooze-modal');}
+function doSnooze(days){const p=properties.find(x=>x.id===snoozeTargetId);if(!p)return;const r=(p.reminders||[]).find(r=>r.id===snoozeReminderId);if(!r)return;r.snoozedTo=Date.now()+days*86400000;p.updatedTs=Date.now();closeModal('snooze-modal');if(snoozeTargetId===selectedId)renderPanel();renderList();renderMarkers();persistOne(p);toast(`Snoozed ${days} day${days>1?'s':''}`);}
+function toggleReminderDone(propId,remId){const p=properties.find(x=>x.id===propId);if(!p)return;const r=(p.reminders||[]).find(r=>r.id===remId);if(!r)return;r.done=!r.done;if(r.done)r.snoozedTo=null;p.updatedTs=Date.now();if(propId===selectedId)renderPanel();renderList();renderMarkers();persistOne(p);toast(r.done?'✓ Reminder completed':'Reminder reopened');}
 
-async function applyBulkAndUndo(label, fn) {
-  pushUndo(label);
-  getSelectedProps().forEach(fn);
-  await persistAll();
-  renderMarkers(); renderList();
-  if (selectedId && selectedIds.has(selectedId)) renderPanel();
-  toastUndo(`${label} applied to ${selectedIds.size} props`);
-}
+// ── Structured Notes ──
+function openSnoteModal(id){noteTargetId=id;document.getElementById('sn-body').value='';pickChip('sn-type',document.querySelector('#sn-type .chip'));openModal('snote-modal');setTimeout(()=>document.getElementById('sn-body').focus(),50);}
+function saveStructuredNote(){const body=document.getElementById('sn-body').value.trim();if(!body){toast('Note body required');return;}const p=properties.find(x=>x.id===noteTargetId);if(!p)return;const type=getChip('sn-type')||'general';if(!p.structuredNotes)p.structuredNotes=[];p.structuredNotes.push({id:uid(),ts:Date.now(),type,body});p.updatedTs=Date.now();closeModal('snote-modal');if(noteTargetId===selectedId)renderPanel();persistOne(p);toast('Note saved');}
+function deleteStructuredNote(propId,noteId){const p=properties.find(x=>x.id===propId);if(!p)return;p.structuredNotes=(p.structuredNotes||[]).filter(n=>n.id!==noteId);p.updatedTs=Date.now();if(propId===selectedId)renderPanel();persistOne(p);}
 
-function toastUndo(msg) {
-  const t = makeToast(msg + ' ', true);
-  const btn = t.querySelector('.toast-undo');
-  btn.onclick = () => {
-    performUndo();
-    t.classList.remove('on');
-    setTimeout(() => t.remove(), 400);
-  };
-}
+// ── Tags ──
+function openTagModal(id){tagTargetId=id;document.getElementById('tag-inp').value='';openModal('tag-modal');setTimeout(()=>document.getElementById('tag-inp').focus(),50);}
+function saveTag(){const val=document.getElementById('tag-inp').value.trim().toLowerCase();if(!val){toast('Tag required');return;}const p=properties.find(x=>x.id===tagTargetId);if(!p)return;if(!p.tags)p.tags=[];if(!p.tags.includes(val)){p.tags.push(val);p.updatedTs=Date.now();}closeModal('tag-modal');if(tagTargetId===selectedId)renderPanel();renderList();persistOne(p);}
 
-function performUndo() {
-  if (!undoStack.length) return;
-  const { snapshot, ids } = undoStack.pop();
-  snapshot.forEach(snap => {
-    const idx = properties.findIndex(p => p.id === snap.id);
-    if (idx !== -1) properties[idx] = snap;
-  });
-  persistAll();
-  renderMarkers(); renderList();
-  if (selectedId && ids.has?.(selectedId)) renderPanel();
-  toast('Undo applied');
-}
+// ── Bulk Actions ──
+function getSelectedProps(){return properties.filter(p=>selectedIds.has(p.id));}
+function pushUndo(label){undoStack.push({label,snapshot:JSON.parse(JSON.stringify(getSelectedProps())),ids:[...selectedIds]});if(undoStack.length>20)undoStack.shift();}
+async function applyBulkAndUndo(label,fn){pushUndo(label);getSelectedProps().forEach(fn);await persistAll();renderMarkers();renderList();if(selectedId&&selectedIds.has(selectedId))renderPanel();toastUndo(`${label} applied to ${selectedIds.size} props`);}
+function toastUndo(msg){const t=makeToast(msg+' ',true);const btn=t.querySelector('.toast-undo');btn.onclick=()=>{performUndo();t.classList.remove('on');setTimeout(()=>t.remove(),400);};}
+function performUndo(){if(!undoStack.length)return;const{snapshot,ids}=undoStack.pop();snapshot.forEach(snap=>{const idx=properties.findIndex(p=>p.id===snap.id);if(idx!==-1)properties[idx]=snap;});persistAll();renderMarkers();renderList();toast('Undo applied');}
+function bulkStatus(){if(!selectedIds.size)return;document.getElementById('bsm-count').textContent=selectedIds.size;openModal('bulk-status-modal');}
+function applyBulkStatus(){const st=document.getElementById('bsm-sel').value;closeModal('bulk-status-modal');applyBulkAndUndo('Status → '+st,p=>{p.status=st;p.updatedTs=Date.now();});}
+function bulkTag(){if(!selectedIds.size)return;document.getElementById('btm-count').textContent=selectedIds.size;document.getElementById('btm-inp').value='';openModal('bulk-tag-modal');}
+function applyBulkTag(){const val=document.getElementById('btm-inp').value.trim().toLowerCase();if(!val)return;closeModal('bulk-tag-modal');applyBulkAndUndo('Tag "'+val+'"',p=>{if(!p.tags)p.tags=[];if(!p.tags.includes(val))p.tags.push(val);p.updatedTs=Date.now();});}
+function bulkReminder(){if(!selectedIds.size)return;document.getElementById('brm-count').textContent=selectedIds.size;document.getElementById('brm-label').value='';const tmr=new Date();tmr.setDate(tmr.getDate()+1);document.getElementById('brm-due').value=tmr.toISOString().slice(0,10);openModal('bulk-rem-modal');}
+function applyBulkReminder(){const label=document.getElementById('brm-label').value.trim();if(!label)return;const dueTs=dateInputToTs(document.getElementById('brm-due').value);closeModal('bulk-rem-modal');applyBulkAndUndo('Reminder "'+label+'"',p=>{if(!p.reminders)p.reminders=[];p.reminders.push({id:uid(),dueTs,label,note:'',done:false,snoozedTo:null,channel:''});p.updatedTs=Date.now();});}
+function bulkExportJSON(){const sel=getSelectedProps();if(!sel.length)return;downloadBlob(JSON.stringify(sel,null,2),'text/json',`leadmap_selected_${isoDate()}.json`);toast(`Exported ${sel.length} properties as JSON`);}
+function bulkExportCSV(){const sel=getSelectedProps();if(!sel.length)return;downloadBlob(toCSV(sel),'text/csv',`leadmap_selected_${isoDate()}.csv`);toast(`Exported ${sel.length} properties as CSV`);}
 
-function bulkStatus() {
-  if (!selectedIds.size) return;
-  document.getElementById('bsm-count').textContent = selectedIds.size;
-  openModal('bulk-status-modal');
-}
-function applyBulkStatus() {
-  const st = document.getElementById('bsm-sel').value;
-  closeModal('bulk-status-modal');
-  applyBulkAndUndo('Status → ' + st, p => { p.status = st; p.updatedTs = Date.now(); });
-}
-
-function bulkTag() {
-  if (!selectedIds.size) return;
-  document.getElementById('btm-count').textContent = selectedIds.size;
-  document.getElementById('btm-inp').value = '';
-  openModal('bulk-tag-modal');
-}
-function applyBulkTag() {
-  const val = document.getElementById('btm-inp').value.trim().toLowerCase();
-  if (!val) return;
-  closeModal('bulk-tag-modal');
-  applyBulkAndUndo('Tag "' + val + '"', p => {
-    if (!p.tags) p.tags = [];
-    if (!p.tags.includes(val)) p.tags.push(val);
-    p.updatedTs = Date.now();
-  });
-}
-
-function bulkReminder() {
-  if (!selectedIds.size) return;
-  document.getElementById('brm-count').textContent = selectedIds.size;
-  document.getElementById('brm-label').value = '';
-  const tmr = new Date(); tmr.setDate(tmr.getDate()+1);
-  document.getElementById('brm-due').value = tmr.toISOString().slice(0,10);
-  openModal('bulk-rem-modal');
-}
-function applyBulkReminder() {
-  const label = document.getElementById('brm-label').value.trim();
-  if (!label) return;
-  const dueTs = dateInputToTs(document.getElementById('brm-due').value);
-  closeModal('bulk-rem-modal');
-  applyBulkAndUndo('Reminder "' + label + '"', p => {
-    if (!p.reminders) p.reminders = [];
-    p.reminders.push({ id: uid(), dueTs, label, note: '', done: false, snoozedTo: null, channel: '' });
-    p.updatedTs = Date.now();
-  });
-}
-
-function bulkExportJSON() {
-  const sel = getSelectedProps();
-  if (!sel.length) return;
-  downloadBlob(JSON.stringify(sel, null, 2), 'text/json', `leadmap_selected_${isoDate()}.json`);
-  toast(`Exported ${sel.length} properties as JSON`);
-}
-function bulkExportCSV() {
-  const sel = getSelectedProps();
-  if (!sel.length) return;
-  downloadBlob(toCSV(sel), 'text/csv', `leadmap_selected_${isoDate()}.csv`);
-  toast(`Exported ${sel.length} properties as CSV`);
-}
-
-// ═══════════════════════════════════════════════════════════
-//  TODAY VIEW
-// ═══════════════════════════════════════════════════════════
-function toggleToday() {
-  todayOpen = !todayOpen;
-  document.getElementById('today-overlay').classList.toggle('on', todayOpen);
-  if (todayOpen) renderTodayView();
-}
-
-function renderTodayView() {
-  document.getElementById('today-date').textContent =
-    new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-
-  const overdue = [], today = [], upcoming = [];
-  properties.forEach(p => {
-    activeReminders(p).forEach(r => {
-      if (isOverdue(r))  overdue.push({p,r});
-      else if (isDueToday(r)) today.push({p,r});
-      else if ((r.snoozedTo||r.dueTs) < Date.now()+7*86400000) upcoming.push({p,r});
-    });
-  });
-
-  function card(item, cls) {
-    const { p, r } = item;
-    const eff = r.snoozedTo || r.dueTs;
-    const dueTxt = isOverdue(r)
-      ? `Overdue since ${new Date(eff).toLocaleDateString()}`
-      : `Due ${new Date(eff).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
-    return `<div class="today-rem-card ${cls}">
-      <div class="trc-left">
-        <div class="trc-prop">${esc(p.address)}</div>
-        <div class="trc-lbl">${esc(r.label)}</div>
-        <div class="trc-due" style="color:${cls.includes('overdue')?'#e05252':cls.includes('today-due')?'#f5a623':'var(--text2)'}">${dueTxt}</div>
-        ${r.note?`<div class="trc-lbl" style="color:var(--text3);font-size:10px;margin-top:3px">${escNL(r.note)}</div>`:''}
-      </div>
+// ── Today View ──
+function toggleToday(){todayOpen=!todayOpen;document.getElementById('today-overlay').classList.toggle('on',todayOpen);if(todayOpen)renderTodayView();}
+function renderTodayView(){
+  document.getElementById('today-date').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const overdue=[],today=[],upcoming=[];
+  properties.forEach(p=>activeReminders(p).forEach(r=>{if(isOverdue(r))overdue.push({p,r});else if(isDueToday(r))today.push({p,r});else if((r.snoozedTo||r.dueTs)<Date.now()+7*86400000)upcoming.push({p,r});}));
+  function card(item,cls){
+    const{p,r}=item,eff=r.snoozedTo||r.dueTs;
+    const dueTxt=isOverdue(r)?`Overdue since ${new Date(eff).toLocaleDateString()}`:`Due ${new Date(eff).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`;
+    return`<div class="today-rem-card ${cls}"><div class="trc-left">
+      <div class="trc-prop">${esc(p.address)}</div><div class="trc-lbl">${esc(r.label)}</div>
+      <div class="trc-due" style="color:${cls.includes('overdue')?'#e05252':cls.includes('today-due')?'#f5a623':'var(--text2)'}">${dueTxt}</div>
+      ${r.note?`<div class="trc-lbl" style="color:var(--text3);font-size:10px;margin-top:3px">${escNL(r.note)}</div>`:''}</div>
       <div class="trc-actions">
         <button class="trc-btn go" onclick="goToProp('${esc(p.id)}')">Go →</button>
         <button class="trc-btn" onclick="snoozeReminder('${esc(p.id)}','${esc(r.id)}')">😴</button>
         <button class="trc-btn done" onclick="todayDone('${esc(p.id)}','${esc(r.id)}')">✓</button>
-      </div>
-    </div>`;
+      </div></div>`;
   }
-
-  document.getElementById('today-content').innerHTML = `
-    ${overdue.length?`<div class="today-section">
-      <div class="today-sec-lbl" style="color:#e05252">🔴 Overdue (${overdue.length})</div>
-      ${overdue.map(i=>card(i,'overdue')).join('')}
-    </div>`:''}
-    <div class="today-section">
-      <div class="today-sec-lbl" style="color:#f5a623">⏰ Due Today (${today.length})</div>
-      ${today.length?today.map(i=>card(i,'today-due')).join(''):'<div class="today-empty">Nothing due today. 🎉</div>'}
-    </div>
-    <div class="today-section">
-      <div class="today-sec-lbl">📅 Upcoming (next 7 days) (${upcoming.length})</div>
-      ${upcoming.length?upcoming.map(i=>card(i,'')).join(''):'<div class="today-empty">No upcoming reminders.</div>'}
-    </div>`;
+  document.getElementById('today-content').innerHTML=`
+    ${overdue.length?`<div class="today-section"><div class="today-sec-lbl" style="color:#e05252">🔴 Overdue (${overdue.length})</div>${overdue.map(i=>card(i,'overdue')).join('')}</div>`:''}
+    <div class="today-section"><div class="today-sec-lbl" style="color:#f5a623">⏰ Due Today (${today.length})</div>${today.length?today.map(i=>card(i,'today-due')).join(''):'<div class="today-empty">Nothing due today. 🎉</div>'}</div>
+    <div class="today-section"><div class="today-sec-lbl">📅 Upcoming — next 7 days (${upcoming.length})</div>${upcoming.length?upcoming.map(i=>card(i,'')).join(''):'<div class="today-empty">No upcoming reminders.</div>'}</div>`;
 }
+function goToProp(id){toggleToday();activeFilter='all';document.querySelectorAll('.filt').forEach(b=>{b.className='filt';});document.querySelector('.filt').classList.add('act-all');renderMarkers();renderList();selectProp(id);}
+function todayDone(propId,remId){toggleReminderDone(propId,remId);if(todayOpen)renderTodayView();}
 
-function goToProp(id) {
-  toggleToday();
-  // Reset to all filter
-  activeFilter = 'all';
-  document.querySelectorAll('.filt').forEach(b => { b.className='filt'; });
-  document.querySelector('.filt').classList.add('act-all');
-  renderMarkers();
-  renderList();
-  selectProp(id);
-}
-
-function todayDone(propId, remId) {
-  toggleReminderDone(propId, remId);
-  if (todayOpen) renderTodayView();
-}
-
-// ═══════════════════════════════════════════════════════════
-//  CALL SCRIPT
-// ═══════════════════════════════════════════════════════════
-function openScript() {
-  const p = properties.find(x => x.id === selectedId);
-  if (!p) return;
-  const fn = firstName(p.owner);
-  const ofr = fmt(p.value * OFFER_PCT);
+// ── Call Script ──
+function openScript(){
+  const p=properties.find(x=>x.id===selectedId);if(!p)return;
+  const fn=firstName(p.owner),ofr=fmt(p.value*OFFER_PCT);
   let script;
-  if (isMil(p.mailing)) {
-    script = `[Send a letter — military APO cannot be cold-called easily]\n\nDear ${fn},\n\nMy name is Jefferson Simmons. I'm a real estate investor based in Manhattan, Kansas. I noticed your property at ${p.address} and wanted to reach out directly.\n\nMany service members in your situation find it difficult to manage a property remotely while serving. I'd like to offer you a direct, hassle-free cash purchase — no agent fees, no commissions, no repair costs.\n\nI'm prepared to offer approximately ${ofr}. There's no obligation to respond, but if you're ever considering a sale, I'd love to be your first call.\n\nWarm regards,\nJefferson Simmons\n[YOUR PHONE] · [YOUR EMAIL]`;
-  } else if (isVA(p.mailing)) {
-    script = `Hi, may I speak with ${fn}?\n\n[${fn} answers]\n\n"Hi ${fn}, my name is Jefferson Simmons — I'm a real estate investor in Manhattan, Kansas. I came across your property at ${p.address} and wanted to reach out.\n\nA lot of folks who've moved to the DC/Virginia area after Fort Riley find managing a Kansas rental gets complicated. I'd love to make you a direct cash offer — no agents, no fees on your end, close on your schedule.\n\nI'm thinking around ${ofr}. Is that something you'd want to explore?"\n\n[If not ready:]\n"Totally understand. Can I send you a one-pager so the numbers are on file if your situation changes?"`;
-  } else {
-    script = `Hi, may I speak with ${fn}?\n\n[${fn} answers]\n\n"Hi ${fn}, my name is Jefferson Simmons — I'm a real estate investor in Manhattan, Kansas. I was looking at properties in the area and came across yours at ${p.address}.\n\nI buy direct from owners — cash, no MLS, no commissions, we close on your schedule. I'd love to make you a fair offer.\n\nI'm thinking around ${ofr}. Would you have a few minutes to chat?"\n\n[If voicemail:]\n"Hi ${fn}, this is Jefferson Simmons, real estate investor in Manhattan KS. Interested in your property at ${p.address} — direct cash offer, no hassle. Call me at [YOUR NUMBER]."`;
-  }
-  document.getElementById('script-title').textContent = `📞 Call Script — ${p.owner}`;
-  document.getElementById('script-sub').textContent = `${p.address} · ${fmt(p.value)} appraised · Offer target: ${ofr}`;
-  document.getElementById('script-body-txt').textContent = script;
+  if(isMil(p.mailing)){script=`[Send a letter — military APO cannot be cold-called easily]\n\nDear ${fn},\n\nMy name is Jefferson Simmons. I'm a real estate investor based in Manhattan, Kansas. I noticed your property at ${p.address} and wanted to reach out directly.\n\nMany service members in your situation find it difficult to manage a property remotely while serving. I'd like to offer you a direct, hassle-free cash purchase — no agent fees, no commissions, no repair costs.\n\nI'm prepared to offer approximately ${ofr}. There's no obligation to respond, but if you're ever considering a sale, I'd love to be your first call.\n\nWarm regards,\nJefferson Simmons\n[YOUR PHONE] · [YOUR EMAIL]`;}
+  else if(isVA(p.mailing)){script=`Hi, may I speak with ${fn}?\n\n[${fn} answers]\n\n"Hi ${fn}, my name is Jefferson Simmons — I'm a real estate investor in Manhattan, Kansas. I came across your property at ${p.address} and wanted to reach out.\n\nA lot of folks who've moved to the DC/Virginia area after Fort Riley find managing a Kansas rental gets complicated. I'd love to make you a direct cash offer — no agents, no fees on your end, close on your schedule.\n\nI'm thinking around ${ofr}. Is that something you'd want to explore?"\n\n[If not ready:]\n"Totally understand. Can I send you a one-pager so the numbers are on file if your situation changes?"`;}
+  else{script=`Hi, may I speak with ${fn}?\n\n[${fn} answers]\n\n"Hi ${fn}, my name is Jefferson Simmons — I'm a real estate investor in Manhattan, Kansas. I was looking at properties in the area and came across yours at ${p.address}.\n\nI buy direct from owners — cash, no MLS, no commissions, we close on your schedule. I'd love to make you a fair offer.\n\nI'm thinking around ${ofr}. Would you have a few minutes to chat?"\n\n[If voicemail:]\n"Hi ${fn}, this is Jefferson Simmons, real estate investor in Manhattan KS. Interested in your property at ${p.address} — direct cash offer, no hassle. Call me at [YOUR NUMBER]."`;}
+  document.getElementById('script-title').textContent=`📞 Call Script — ${p.owner}`;
+  document.getElementById('script-sub').textContent=`${p.address} · ${fmt(p.value)} appraised · Offer target: ${ofr}`;
+  document.getElementById('script-body-txt').textContent=script;
   openModal('script-modal');
 }
-function copyScript() {
-  navigator.clipboard.writeText(document.getElementById('script-body-txt').textContent)
-    .then(() => toast('Copied to clipboard'))
-    .catch(() => toast('Select text and copy manually'));
-}
+function copyScript(){navigator.clipboard.writeText(document.getElementById('script-body-txt').textContent).then(()=>toast('Copied to clipboard')).catch(()=>toast('Select text and copy manually'));}
 
-// ═══════════════════════════════════════════════════════════
-//  IMPORT
-// ═══════════════════════════════════════════════════════════
-function triggerImport() { document.getElementById('file-input').click(); }
-
-function handleImport(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const r = new FileReader();
-  r.onload = ev => {
-    try {
-      let raw = [];
-      if (file.name.endsWith('.json')) {
-        const d = JSON.parse(ev.target.result);
-        raw = Array.isArray(d) ? d : (d.properties || []);
-      } else {
-        raw = parseCSVToObjs(ev.target.result);
-      }
-      importProperties(raw);
-    } catch(err) {
-      document.getElementById('import-progress').innerHTML = `<span style="color:var(--red)">Error: ${esc(err.message)}</span>`;
-      openModal('import-modal');
-    }
-  };
-  r.readAsText(file);
-  e.target.value = '';
+// ── Import ──
+function triggerImport(){document.getElementById('file-input').click();}
+function handleImport(e){const file=e.target.files[0];if(!file)return;const r=new FileReader();r.onload=ev=>{try{let raw=[];if(file.name.endsWith('.json')){const d=JSON.parse(ev.target.result);raw=Array.isArray(d)?d:(d.properties||[]);}else{raw=parseCSVToObjs(ev.target.result);}importProperties(raw);}catch(err){document.getElementById('import-progress').innerHTML=`<span style="color:var(--red)">Error: ${esc(err.message)}</span>`;openModal('import-modal');}};r.readAsText(file);e.target.value='';}
+function importProperties(raw){
+  let added=0,updated=0,skipped=0;const log=[];
+  raw.forEach((rawP,i)=>{if(!rawP.address&&!rawP.id){skipped++;log.push(`Row ${i+1}: skipped — no id or address`);return;}
+  const fresh=makeFreshProp(rawP);
+  let existing=properties.find(p=>p.id===fresh.id);
+  if(!existing&&fresh.address)existing=properties.find(p=>p.address.toLowerCase()===fresh.address.toLowerCase());
+  if(existing){const crmFields=['notes','structuredNotes','outreach','reminders','status','tags','contacted','offerMade','offerAmount','activeRental'];crmFields.forEach(k=>{if(existing[k]!==undefined)fresh[k]=existing[k];});fresh.createdTs=existing.createdTs;fresh.updatedTs=Date.now();const idx=properties.indexOf(existing);properties[idx]=fresh;updated++;}
+  else{properties.push(fresh);added++;}});
+  persistAll().then(()=>{refreshAll();const msg=`✓ Imported: +${added} new, ${updated} updated, ${skipped} skipped`;document.getElementById('import-progress').innerHTML=`<span style="color:var(--green)">${msg}</span>${log.length?'<br><small>'+log.map(l=>esc(l)).join('<br>')+'</small>':''}`;openModal('import-modal');});
 }
+function parseCSVToObjs(text){const lines=text.trim().split('\n');if(!lines.length)return[];const headers=lines[0].split(',').map(h=>h.trim().replace(/^"|"$/g,''));return lines.slice(1).filter(l=>l.trim()).map(line=>{const vals=parseCSVLine(line);const obj={};headers.forEach((h,i)=>obj[h]=vals[i]||'');return obj;});}
+function parseCSVLine(line){const res=[];let cur='',inQ=false;for(const ch of line){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){res.push(cur.trim());cur='';}else cur+=ch;}res.push(cur.trim());return res;}
 
-function importProperties(raw) {
-  let added = 0, updated = 0, skipped = 0;
-  const log = [];
-  raw.forEach((rawP, i) => {
-    // Validate minimums
-    if (!rawP.address && !rawP.id) { skipped++; log.push(`Row ${i+1}: skipped — no id or address`); return; }
-    const fresh = makeFreshProp(rawP);
-    // Dedupe by id or address
-    let existing = properties.find(p => p.id === fresh.id);
-    if (!existing && fresh.address) existing = properties.find(p => p.address.toLowerCase() === fresh.address.toLowerCase());
-    if (existing) {
-      // Merge: preserve CRM data, update geo/property data
-      const crmFields = ['notes','structuredNotes','outreach','reminders','status','tags','contacted','offerMade','offerAmount','activeRental'];
-      crmFields.forEach(k => { if (existing[k] !== undefined) fresh[k] = existing[k]; });
-      fresh.createdTs = existing.createdTs;
-      fresh.updatedTs = Date.now();
-      const idx = properties.indexOf(existing);
-      properties[idx] = fresh;
-      updated++;
-    } else {
-      properties.push(fresh);
-      added++;
-    }
-  });
-  persistAll().then(() => {
-    refreshAll();
-    const msg = `✓ Imported: +${added} new, ${updated} updated, ${skipped} skipped`;
-    document.getElementById('import-progress').innerHTML = `<span style="color:var(--green)">${msg}</span>${log.length?'<br><small>'+log.map(l=>esc(l)).join('<br>')+'</small>':''}`;
-    openModal('import-modal');
-  });
-}
-
-function parseCSVToObjs(text) {
-  const lines = text.trim().split('\n');
-  if (!lines.length) return [];
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
-  return lines.slice(1).filter(l => l.trim()).map(line => {
-    const vals = parseCSVLine(line);
-    const obj = {};
-    headers.forEach((h,i) => obj[h] = vals[i] || '');
-    return obj;
-  });
-}
-function parseCSVLine(line) {
-  const res = []; let cur = '', inQ = false;
-  for (const ch of line) {
-    if (ch === '"') inQ = !inQ;
-    else if (ch === ',' && !inQ) { res.push(cur.trim()); cur = ''; }
-    else cur += ch;
-  }
-  res.push(cur.trim());
-  return res;
-}
-
-// ═══════════════════════════════════════════════════════════
-//  EXPORT
-// ═══════════════════════════════════════════════════════════
-function exportJSON() {
-  if (!properties.length) { toast('No data to export'); return; }
-  downloadBlob(JSON.stringify(properties, null, 2), 'application/json', `leadmap_${isoDate()}.json`);
-  toast(`Exported ${properties.length} properties`);
-}
-
-function exportCSV() {
-  if (!properties.length) { toast('No data to export'); return; }
-  downloadBlob(toCSV(properties), 'text/csv', `leadmap_${isoDate()}.csv`);
-  toast(`Exported ${properties.length} properties as CSV`);
-}
-
-function toCSV(arr) {
-  const hdrs = ['id','address','city','owner','mailing','value','lat','lng','status','tags','notes','contacted','offerMade','offerAmount','activeRental','createdTs','updatedTs'];
-  const rows = arr.map(p => hdrs.map(h => {
-    let v = h === 'tags' ? (p.tags||[]).join(';') : String(p[h] === undefined ? '' : p[h]);
-    return v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g,'""')}"` : v;
-  }).join(','));
-  return [hdrs.join(','), ...rows].join('\n');
-}
-
-function exportICS() {
-  const lines = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LeadMap v4//EN','CALSCALE:GREGORIAN'];
-  let count = 0;
-  properties.forEach(p => {
-    activeReminders(p).forEach(r => {
-      const d = new Date(r.dueTs);
-      const fmt2 = n => String(n).padStart(2,'0');
-      const dtStr = `${d.getUTCFullYear()}${fmt2(d.getUTCMonth()+1)}${fmt2(d.getUTCDate())}T${fmt2(d.getUTCHours())}${fmt2(d.getUTCMinutes())}00Z`;
-      lines.push('BEGIN:VEVENT',
-        `UID:${r.id}@leadmap4`,
-        `DTSTART:${dtStr}`,
-        `SUMMARY:${(r.label+'').replace(/[,;\\]/g,'\\$&')} — ${(p.address+'').replace(/[,;\\]/g,'\\$&')}`,
-        `DESCRIPTION:${(p.owner+'').replace(/[,;\\]/g,'\\$&')} · ${(p.address+'').replace(/[,;\\]/g,'\\$&')}${r.note?'\\n'+r.note.replace(/[,;\\]/g,'\\$&'):''}`,
-        'END:VEVENT');
-      count++;
-    });
-  });
+// ── Export ──
+function exportJSON(){if(!properties.length){toast('No data to export');return;}downloadBlob(JSON.stringify(properties,null,2),'application/json',`leadmap_${isoDate()}.json`);toast(`Exported ${properties.length} properties`);}
+function exportCSV(){if(!properties.length){toast('No data to export');return;}downloadBlob(toCSV(properties),'text/csv',`leadmap_${isoDate()}.csv`);toast(`Exported ${properties.length} properties as CSV`);}
+function toCSV(arr){const hdrs=['id','address','city','owner','mailing','value','lat','lng','status','tags','notes','contacted','offerMade','offerAmount','activeRental','createdTs','updatedTs'];const rows=arr.map(p=>hdrs.map(h=>{let v=h==='tags'?(p.tags||[]).join(';'):String(p[h]===undefined?'':p[h]);return v.includes(',')||v.includes('"')||v.includes('\n')?`"${v.replace(/"/g,'""')}"`  :v;}).join(','));return[hdrs.join(','),...rows].join('\n');}
+function exportICS(){
+  const lines=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//LeadMap v4//EN','CALSCALE:GREGORIAN'];
+  let count=0;
+  properties.forEach(p=>activeReminders(p).forEach(r=>{
+    const d=new Date(r.dueTs),fmt2=n=>String(n).padStart(2,'0');
+    const dtStr=`${d.getUTCFullYear()}${fmt2(d.getUTCMonth()+1)}${fmt2(d.getUTCDate())}T${fmt2(d.getUTCHours())}${fmt2(d.getUTCMinutes())}00Z`;
+    lines.push('BEGIN:VEVENT',`UID:${r.id}@leadmap4`,`DTSTART:${dtStr}`,`SUMMARY:${(r.label+'').replace(/[,;\\]/g,'\\$&')} — ${(p.address+'').replace(/[,;\\]/g,'\\$&')}`,`DESCRIPTION:${(p.owner+'').replace(/[,;\\]/g,'\\$&')} · ${(p.address+'').replace(/[,;\\]/g,'\\$&')}${r.note?'\\n'+r.note.replace(/[,;\\]/g,'\\$&'):''}`,  'END:VEVENT');
+    count++;
+  }));
   lines.push('END:VCALENDAR');
-  downloadBlob(lines.join('\r\n'), 'text/calendar', `leadmap_reminders_${isoDate()}.ics`);
+  downloadBlob(lines.join('\r\n'),'text/calendar',`leadmap_reminders_${isoDate()}.ics`);
   toast(`Exported ${count} reminders as ICS`);
 }
+function downloadBlob(content,type,filename){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=filename;a.click();}
+const isoDate=()=>new Date().toISOString().slice(0,10);
 
-function downloadBlob(content, type, filename) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([content], { type }));
-  a.download = filename;
-  a.click();
-}
-const isoDate = () => new Date().toISOString().slice(0,10);
+// ── Clear All ──
+async function clearAll(){if(!confirm('Clear ALL saved data? This cannot be undone.'))return;await idbClear();try{localStorage.removeItem(LS_KEY);}catch(_){}properties=[];selectedId=null;selectedIds.clear();refreshAll();toast('All data cleared');}
 
-// ═══════════════════════════════════════════════════════════
-//  CLEAR ALL
-// ═══════════════════════════════════════════════════════════
-async function clearAll() {
-  if (!confirm('Clear ALL saved data? This cannot be undone.')) return;
-  await idbClear();
-  try { localStorage.removeItem(LS_KEY); } catch(_){}
-  properties = [];
-  selectedId = null;
-  selectedIds.clear();
-  refreshAll();
-  toast('All data cleared');
-}
+// ── Toast ──
+function makeToast(msg,withUndo){const wrap=document.getElementById('toast-wrap');const t=document.createElement('div');t.className='toast';t.innerHTML=esc(msg)+(withUndo?'<button class="toast-undo">Undo</button>':'');wrap.appendChild(t);requestAnimationFrame(()=>t.classList.add('on'));setTimeout(()=>{t.classList.remove('on');setTimeout(()=>t.remove(),400);},withUndo?6000:2500);return t;}
+function toast(msg){makeToast(msg,false);}
 
-// ═══════════════════════════════════════════════════════════
-//  TOAST
-// ═══════════════════════════════════════════════════════════
-function makeToast(msg, withUndo) {
-  const wrap = document.getElementById('toast-wrap');
-  const t = document.createElement('div');
-  t.className = 'toast';
-  t.innerHTML = esc(msg) + (withUndo ? '<button class="toast-undo">Undo</button>' : '');
-  wrap.appendChild(t);
-  requestAnimationFrame(() => t.classList.add('on'));
-  setTimeout(() => {
-    t.classList.remove('on');
-    setTimeout(() => t.remove(), 400);
-  }, withUndo ? 6000 : 2500);
-  return t;
-}
-function toast(msg) { makeToast(msg, false); }
+// ── Stats ──
+function updateFooterStats(){document.getElementById('st-leads').textContent=properties.length;document.getElementById('st-hot').textContent=properties.filter(p=>p.status==='hot').length;document.getElementById('st-offers').textContent=properties.filter(p=>p.offerMade).length;}
+function updateTodayBadge(){const n=countTodayReminders();const badge=document.getElementById('today-badge');badge.textContent=n>0?n:'';badge.classList.toggle('on',n>0);}
 
-// ═══════════════════════════════════════════════════════════
-//  STATS
-// ═══════════════════════════════════════════════════════════
-function updateFooterStats() {
-  document.getElementById('st-leads').textContent = properties.length;
-  document.getElementById('st-hot').textContent = properties.filter(p => p.status==='hot').length;
-  document.getElementById('st-offers').textContent = properties.filter(p => p.offerMade).length;
-}
-function updateTodayBadge() {
-  const n = countTodayReminders();
-  const badge = document.getElementById('today-badge');
-  badge.textContent = n > 0 ? n : '';
-  badge.classList.toggle('on', n > 0);
-}
+// ── Refresh All ──
+function refreshAll(){renderMarkers();renderList();if(selectedId)renderPanel();else deselectProp();updateFooterStats();updateTodayBadge();}
 
-// ═══════════════════════════════════════════════════════════
-//  REFRESH ALL
-// ═══════════════════════════════════════════════════════════
-function refreshAll() {
-  renderMarkers();
-  renderList();
-  if (selectedId) renderPanel(); else deselectProp();
-  updateFooterStats();
-  updateTodayBadge();
-}
-
-// ═══════════════════════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════════════════════
-async function init() {
+// ── Init ──
+async function init(){
   initMap();
-  try {
-    db = await openDB();
-    properties = await idbGetAll();
-  } catch (_) {
-    db = null;
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      properties = raw ? JSON.parse(raw) : [];
-    } catch(_) { properties = []; }
+  try{db=await openDB();properties=await idbGetAll();}
+  catch(_){db=null;try{const raw=localStorage.getItem(LS_KEY);properties=raw?JSON.parse(raw):[];}catch(_){properties=[];}}
+  properties=properties.map(p=>makeFreshProp(p));
+  if(!properties.length){
+    properties=SAMPLE.map(p=>makeFreshProp(p));
+    const tmr=new Date();tmr.setDate(tmr.getDate()+1);
+    properties[0].reminders.push({id:uid(),dueTs:tmr.getTime(),label:'Follow up call',note:"Ask if they're thinking about selling",done:false,snoozedTo:null,channel:'call'});
+    properties[2].reminders.push({id:uid(),dueTs:Date.now()-86400000,label:'Send intro letter',note:'Virginia address — Fort Riley connection',done:false,snoozedTo:null,channel:'letter'});
+    await persistAll();toast('10 sample properties loaded');
   }
-
-  // Migrate any v3-style records
-  properties = properties.map(p => makeFreshProp(p));
-
-  if (!properties.length) {
-    // Load sample data on first run
-    properties = SAMPLE.map(p => makeFreshProp(p));
-    // Add a sample reminder to first prop
-    const tmr = new Date(); tmr.setDate(tmr.getDate()+1);
-    properties[0].reminders.push({ id:uid(), dueTs:tmr.getTime(), label:'Follow up call', note:'Ask if they\'re thinking about selling', done:false, snoozedTo:null, channel:'call' });
-    properties[2].reminders.push({ id:uid(), dueTs:Date.now()-86400000, label:'Send intro letter', note:'Virginia address — Fort Riley connection', done:false, snoozedTo:null, channel:'letter' });
-    await persistAll();
-    toast('10 sample properties loaded');
-  }
-
   refreshAll();
 }
-
-window.addEventListener('load', init);
+window.addEventListener('load',init);
 </script>
 </body>
 </html>
